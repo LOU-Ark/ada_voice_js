@@ -1,3 +1,9 @@
+// Represents a source found via Google Search
+export interface WebSource {
+  title: string;
+  uri: string;
+}
+
 // Represents the core editable properties of a persona
 export interface PersonaState {
   name: string;
@@ -8,6 +14,7 @@ export interface PersonaState {
   experience: string;
   other: string; // New field for other free-form notes
   summary: string;
+  sources?: WebSource[]; // Added for web sources
 }
 
 // Represents a single entry in the persona's history
@@ -35,4 +42,16 @@ export interface Voice {
   name: string;
   token: string;
   voiceId: string;
+}
+
+// Represents a message in the persona creation chat
+export interface PersonaCreationChatMessage {
+  role: 'user' | 'model';
+  text: string;
+}
+
+// Represents the response from the AI during persona creation chat
+export interface PersonaCreationChatResponse {
+  responseText: string;
+  updatedParameters: Partial<PersonaState>;
 }

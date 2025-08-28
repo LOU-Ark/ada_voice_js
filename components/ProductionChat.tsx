@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Persona, PersonaState, ChatMessage, Voice } from '../types';
 import * as geminiService from '../services/geminiService';
@@ -185,19 +186,19 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
 
     return (
         <div className="bg-gray-800 rounded-lg shadow-2xl w-full h-full flex flex-col">
-            <header className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-700 gap-4 flex-wrap">
-                <h2 className="text-xl font-bold text-white">AI Chat</h2>
-                <div className="flex items-center gap-2 flex-wrap">
+            <header className="flex-shrink-0 flex flex-col md:flex-row justify-between md:items-center p-4 border-b border-gray-700 gap-4">
+                <h2 className="text-xl font-bold text-white self-start md:self-center">AI Chat</h2>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
                      <select id="persona-select" value={selectedPersonaId} onChange={handlePersonaChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <option value="default">Default Assistant</option>
                         {personas.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
                     </select>
-                    <button onClick={onAddPersona} className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 transition-colors rounded-md text-sm"><PlusIcon /> Add Persona</button>
+                    <button onClick={onAddPersona} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 transition-colors rounded-md text-sm"><PlusIcon /> Add Persona</button>
                     <select id="voice-select" value={selectedVoiceId} onChange={handleVoiceChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <option value="none">No Voice</option>
                         {voices.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
                     </select>
-                    <button onClick={onManageVoices} className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 transition-colors rounded-md text-sm"><CogIcon/> Manage Voices</button>
+                    <button onClick={onManageVoices} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 transition-colors rounded-md text-sm"><CogIcon/> Manage Voices</button>
                 </div>
             </header>
 

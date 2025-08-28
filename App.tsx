@@ -114,23 +114,23 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
-      <div className="container mx-auto px-4 py-8 flex flex-col h-screen max-h-screen">
+      <div className={`container mx-auto px-4 py-8 ${activeView === 'chat' ? 'flex flex-col h-screen max-h-screen' : ''}`}>
         <header className="flex-shrink-0">
-          <div className="flex justify-between items-center mb-6">
-            <div>
+          <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
+            <div className="text-center md:text-left">
               <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-600">
                 Interactive Persona Editor
               </h1>
               <p className="text-gray-400 mt-1">AI-powered character creation studio.</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4 self-center md:self-auto">
               <div className="flex gap-1 bg-gray-800 p-1 rounded-lg">
                   <button onClick={() => setActiveView('editor')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeView === 'editor' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}><EditIcon /> Editor</button>
                   <button onClick={() => setActiveView('chat')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeView === 'chat' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}><ChatBubbleIcon /> Chat</button>
               </div>
               <button
                 onClick={() => handleOpenModal()}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-md shadow-lg"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-md shadow-lg"
               >
                 <PlusIcon />
                 New Persona
@@ -139,7 +139,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-grow overflow-hidden">
+        <main className={`${activeView === 'chat' ? 'flex-grow overflow-hidden' : ''}`}>
           {activeView === 'editor' ? (
             <PersonaList 
               personas={personas} 

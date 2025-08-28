@@ -1,6 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { Persona, PersonaState, ChatMessage } from '../types';
+import { Persona, PersonaState, ChatMessage, WebSource, PersonaCreationChatMessage, PersonaCreationChatResponse } from '../types';
 
 // =================================================================================
 // IMPORTANT SECURITY NOTICE
@@ -61,6 +60,52 @@ const generateWithSchema = async <T,>(prompt: string): Promise<T> => {
     }
 }
 
+export const createPersonaFromWeb = async (topic: string): Promise<{ personaState: Omit<PersonaState, 'summary'>, sources: WebSource[] }> => {
+    // Step 1: Search the web and synthesize information.
+    const searchPrompt = `ウェブで「${topic}」に関する情報を検索してください。その情報を統合し、キャラクタープロファイル作成に適した詳細な説明文を日本語で生成してください。考えられる背景、性格、口調、そして特徴的な経験についての詳細を含めてください。`;
+
+    const searchResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: searchPrompt,
+        config: {
+            tools: [{ googleSearch: {} }],
+        },
+    });
+
+    const synthesizedText = searchResponse.text;
+    const groundingChunks = searchResponse.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    
+    const sources: WebSource[] = groundingChunks
+        .map((chunk: any) => ({
+            title: chunk.web?.title || 'Unknown Source',
+            uri: chunk.web?.uri || '#',
+        }))
+        .filter((source: WebSource, index: number, self: WebSource[]) =>
+            source.uri !== '#' && self.findIndex(s => s.uri === source.uri) === index
+        );
+
+
+    if (!synthesizedText) {
+        throw new Error("AI could not find enough information on the topic.");
+    }
+    
+    // Step 2: Extract parameters from the synthesized text.
+    const extractionPrompt = `以下のテキストに基づいて、指定されたJSONフォーマットでキャラクターのパラメータを日本語で抽出しなさい。\n\n---\n\n${synthesizedText}`;
+    
+    const extractedParams = await generateWithSchema<Omit<PersonaState, 'summary' | 'sources'>>(extractionPrompt);
+
+    const finalPersonaState = {
+        ...extractedParams,
+        sources: sources,
+    };
+    
+    return {
+        personaState: finalPersonaState,
+        sources,
+    };
+};
+
+
 export const extractParamsFromDoc = async (documentText: string): Promise<PersonaState> => {
     const prompt = `以下のテキストから、指定されたJSONフォーマットに従ってキャラクター情報を日本語で抽出しなさい。\n\n---\n\n${documentText}`;
     return generateWithSchema<PersonaState>(prompt);
@@ -107,6 +152,75 @@ ${JSON.stringify(newState, null, 2)}
         // Return a generic summary on error to not block the save operation
         return "パラメータが更新されました。";
     }
+};
+
+export const continuePersonaCreationChat = async (
+  history: PersonaCreationChatMessage[],
+  currentParams: Partial<PersonaState>
+): Promise<PersonaCreationChatResponse> => {
+  const personaCreationSchema = {
+    type: Type.OBJECT,
+    properties: {
+      responseText: { type: Type.STRING, description: "AIの次の返答。ユーザーへの質問や提案を日本語で行う。" },
+      updatedParameters: {
+        type: Type.OBJECT,
+        description: "会話に基づいて更新されたペルソナのパラメータ。新規または変更されたフィールドのみ含む。",
+        properties: {
+          name: { type: Type.STRING, description: "キャラクターの名前" },
+          role: { type: Type.STRING, description: "キャラクターの役割や職業" },
+          tone: { type: Type.STRING, description: "キャラクターの口調や話し方" },
+          personality: { type: Type.STRING, description: "キャラクターの性格" },
+          worldview: { type: Type.STRING, description: "キャラクターが生きる世界の背景設定" },
+          experience: { type: Type.STRING, description: "キャラクターの過去の経験や経歴" },
+          other: { type: Type.STRING, description: "その他の自由記述設定" },
+        },
+      }
+    },
+    required: ["responseText", "updatedParameters"]
+  };
+
+  const systemInstruction = `あなたは、ユーザーがキャラクター（ペルソナ）を作成するのを手伝う、創造的なアシスタントです。会話を通じてキャラクターの詳細を具体化することが目的です。
+- ユーザーと日本語でフレンドリーな会話をしてください。
+- ペルソナの各項目（名前、役割、口調など）を埋めるために、一度に一つずつ、明確な質問を投げかけてください。
+- ユーザーの回答に基づいて、'updatedParameters'オブジェクトを更新してください。新規追加または変更された項目のみを含めてください。
+- ユーザーが専門的な知識（歴史上の人物、特定の舞台設定など）を必要とするトピックを提示した場合、Google Searchを使って情報を収集し、具体的な提案を行ってください。
+- あなたの返答（responseText）は、会話を次に進めるためのガイドとなるようにしてください。
+- 全てのプロセスは対話形式で進みます。一度に全ての項目を埋めようとしないでください。
+
+現在のペルソナの状態:
+${JSON.stringify(currentParams, null, 2)}
+`;
+
+  const conversationHistory = history.map(msg => ({
+    role: msg.role,
+    parts: [{ text: msg.text }]
+  }));
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: conversationHistory,
+      config: {
+        systemInstruction,
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: personaCreationSchema,
+      },
+    });
+
+    const jsonText = response.text.trim();
+    if (!jsonText) {
+      throw new Error("AI returned an empty response.");
+    }
+    const parsed = JSON.parse(jsonText);
+    return {
+      responseText: parsed.responseText || "...",
+      updatedParameters: parsed.updatedParameters || {}
+    };
+  } catch (error) {
+    console.error("Error during persona creation chat:", error);
+    throw new Error("ペルソナ作成中にAIからの有効な応答を取得できませんでした。");
+  }
 };
 
 
