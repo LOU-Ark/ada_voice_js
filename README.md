@@ -43,9 +43,7 @@ AIを活用して詳細なキャラクターペルソナを作成、管理、対
 これは最も重要なステップです。有効なGoogle Gemini APIキーがないと、アプリケーションは機能しません。
 
 - **Google Gemini APIキー:**
-  1.  `services/geminiService.ts` ファイルを開きます。
-  2.  `const API_KEY = "YOUR_API_KEY_HERE";` という行を見つけます。
-  3.  `"YOUR_API_KEY_HERE"` を、ご自身の実際のGoogle Gemini APIキーに置き換えてください。
+  このアプリケーションは、`GEMINI_API_KEY`という名前の環境変数からGoogle Gemini APIキーを読み込むように設定されています。アプリケーションを実行する環境で、この環境変数を設定してください。コード内にキーを直接書き込む必要はありません。
 
 - **Fish Audio TTS (任意):**
   テキスト読み上げ機能には、Fish Audioの認証情報が必要です。

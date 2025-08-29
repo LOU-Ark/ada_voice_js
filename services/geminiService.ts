@@ -1,28 +1,9 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Persona, PersonaState, ChatMessage, WebSource, PersonaCreationChatMessage, PersonaCreationChatResponse } from '../types';
+import { Persona, PersonaState, ChatMessage, WebSource, PersonaCreationChatMessage, PersonaCreationChatResponse, MbtiProfile } from '../types';
 
-// =================================================================================
-// IMPORTANT SECURITY NOTICE
-// =================================================================================
-// The API key is hardcoded here for demonstration purposes in this specific
-// sandboxed environment ONLY.
-//
-// In a real-world application, you MUST NEVER expose your API key on the
-// client-side. Instead, you should:
-// 1. Use environment variables (e.g., process.env.API_KEY).
-// 2. Access the API key from a secure backend or serverless function.
-//
-// Storing keys in client-side code can lead to unauthorized use and compromise
-// your account security.
-// =================================================================================
-const API_KEY = "YOUR_API_KEY_HERE"; // <-- PASTE YOUR GOOGLE GEMINI API KEY HERE
-
-if (API_KEY === "YOUR_API_KEY_HERE") {
-  console.warn("Gemini API key is not set. Please replace 'YOUR_API_KEY_HERE' in services/geminiService.ts with your actual API key.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// Fix: Initialize the GoogleGenAI client using the API key from environment variables.
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
 
 const personaSchema = {
   type: Type.OBJECT,
@@ -36,6 +17,26 @@ const personaSchema = {
     other: { type: Type.STRING, description: "その他の自由記述設定 (Other free-form settings or notes)" },
   },
   required: ["name", "role", "tone", "personality", "worldview", "experience"]
+};
+
+const mbtiProfileSchema = {
+    type: Type.OBJECT,
+    properties: {
+        type: { type: Type.STRING, description: "The 4-letter MBTI type code (e.g., 'INFJ', 'ESTP')." },
+        typeName: { type: Type.STRING, description: "The descriptive name for the MBTI type (e.g., 'Advocate', 'Entrepreneur')." },
+        description: { type: Type.STRING, description: "A brief, one-paragraph description of this personality type, written from the perspective of the character in Japanese." },
+        scores: {
+            type: Type.OBJECT,
+            properties: {
+                mind: { type: Type.NUMBER, description: "Score from 0 (Introverted) to 100 (Extraverted)." },
+                energy: { type: Type.NUMBER, description: "Score from 0 (Sensing) to 100 (Intuitive)." },
+                nature: { type: Type.NUMBER, description: "Score from 0 (Thinking) to 100 (Feeling)." },
+                tactics: { type: Type.NUMBER, description: "Score from 0 (Judging) to 100 (Perceiving)." },
+            },
+            required: ["mind", "energy", "nature", "tactics"]
+        }
+    },
+    required: ["type", "typeName", "description", "scores"]
 };
 
 
@@ -152,6 +153,44 @@ ${JSON.stringify(newState, null, 2)}
         console.error("Error generating change summary:", error);
         // Return a generic summary on error to not block the save operation
         return "パラメータが更新されました。";
+    }
+};
+
+export const generateMbtiProfile = async (personaState: PersonaState): Promise<MbtiProfile> => {
+    const personaData = { ...personaState };
+    delete personaData.mbtiProfile; // Avoid circular analysis
+    delete personaData.sources;
+    delete personaData.summary; // Use the core parameters for analysis
+
+    const prompt = `以下のキャラクター設定を分析し、マイヤーズ・ブリッグス・タイプ指標（MBTI）プロファイルを日本語で生成してください。
+キャラクターの視点から書かれた短い説明を含めてください。
+また、4つの軸（Mind, Energy, Nature, Tactics）それぞれについて、0から100の間のスコアを割り当ててください。
+
+- Mind: 0 = 完全に内向的 (Introverted), 100 = 完全に外向的 (Extraverted)
+- Energy: 0 = 完全に感覚的 (Sensing), 100 = 完全に直観的 (Intuitive)
+- Nature: 0 = 完全に思考的 (Thinking), 100 = 完全に感情的 (Feeling)
+- Tactics: 0 = 完全に判断的 (Judging), 100 = 完全に知覚的 (Perceiving)
+
+キャラクター設定:
+${JSON.stringify(personaData, null, 2)}
+`;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: mbtiProfileSchema,
+            },
+        });
+        const jsonText = response.text.trim();
+        if (!jsonText) {
+            throw new Error("AI returned an empty response for MBTI analysis.");
+        }
+        return JSON.parse(jsonText);
+    } catch (error) {
+        console.error("Error during Gemini API call for MBTI profile:", error);
+        throw new Error("Failed to get a valid MBTI profile from AI.");
     }
 };
 

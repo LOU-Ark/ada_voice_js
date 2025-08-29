@@ -41,7 +41,14 @@ export const PersonaList: React.FC<PersonaListProps> = ({ personas, onEdit, onDe
       {personas.map(persona => (
         <div key={persona.id} className="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col justify-between transition-transform transform hover:-translate-y-1">
           <div>
-            <h3 className="text-xl font-bold text-indigo-400">{persona.name}</h3>
+            <div className="flex items-baseline gap-3 mb-1">
+              <h3 className="text-xl font-bold text-indigo-400">{persona.name}</h3>
+              {persona.mbtiProfile?.type && (
+                <span className="px-2 py-0.5 bg-indigo-500/30 text-indigo-300 text-xs font-semibold rounded-full">
+                  {persona.mbtiProfile.type}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-400 mb-4">{persona.role}</p>
             <div className="space-y-2 text-sm">
                 <p><strong className="font-semibold text-gray-300">Tone:</strong> <span className="text-gray-400">{persona.tone}</span></p>

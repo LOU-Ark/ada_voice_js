@@ -1,9 +1,11 @@
 
 import React, { useState, useCallback, ChangeEvent, useEffect, useMemo, useRef } from 'react';
-import { Persona, PersonaState, PersonaHistoryEntry, ChatMessage, PersonaCreationChatMessage } from '../types';
+import { Persona, PersonaState, PersonaHistoryEntry, ChatMessage, PersonaCreationChatMessage, MbtiProfile } from '../types';
 import * as geminiService from '../services/geminiService';
-import { MagicWandIcon, TextIcon, SaveIcon, CloseIcon, HistoryIcon, BackIcon, SendIcon, UndoIcon, UploadIcon, SearchIcon, SparklesIcon } from './icons';
+// Fix: Removed unused 'BackIcon' which is not exported from './icons'.
+import { MagicWandIcon, TextIcon, SaveIcon, CloseIcon, HistoryIcon, SendIcon, UndoIcon, UploadIcon, SearchIcon, SparklesIcon, BrainIcon } from './icons';
 import { Loader } from './Loader';
+import { RadarChart } from './RadarChart';
 
 interface CreatePersonaModalProps {
   isOpen: boolean;
@@ -158,7 +160,7 @@ const ParametersPanel: React.FC<{
     <div className="space-y-4">
         <h3 className="text-lg font-semibold text-gray-300 mb-2">Parameters</h3>
         <ParameterInput name="name" label="Name" value={parameters.name} onChange={handleParamChange} />
-        <ParameterInput name="role" label="Role" value={parameters.role} onChange={handleParamChange} />
+        <ParameterInput name="role" label="Role" value={parameters.role} onChange={handleParamChange} isTextArea />
         <ParameterInput name="tone" label="Tone" value={parameters.tone} onChange={handleParamChange} isTextArea />
         <ParameterInput name="personality" label="Personality" value={parameters.personality} onChange={handleParamChange} isTextArea />
         <ParameterInput name="worldview" label="Worldview / Background" value={parameters.worldview} onChange={handleParamChange} isTextArea />
@@ -200,6 +202,54 @@ const SummaryPanel: React.FC<{
          </div>
       </div>
 );
+
+const MbtiPanel: React.FC<{
+  mbtiProfile: MbtiProfile | undefined;
+  isLoading: boolean;
+  onAnalyze: () => void;
+}> = ({ mbtiProfile, isLoading, onAnalyze }) => {
+    const radarData = useMemo(() => {
+        if (!mbtiProfile) return [];
+        const { scores } = mbtiProfile;
+        return [
+            { label: 'Mind', value: scores.mind }, // I to E
+            { label: 'Energy', value: scores.energy }, // S to N
+            { label: 'Nature', value: scores.nature }, // T to F
+            { label: 'Tactics', value: scores.tactics }, // J to P
+        ];
+    }, [mbtiProfile]);
+
+    return (
+        <div className="flex flex-col">
+            <h3 className="text-lg font-semibold text-gray-300 mb-2">MBTI Personality Profile</h3>
+            {!mbtiProfile ? (
+                <div className="text-center bg-gray-800/60 rounded-lg p-6 flex flex-col items-center justify-center">
+                    <p className="text-sm text-gray-400 mb-4">Analyze persona to determine their MBTI type.</p>
+                    <button onClick={onAnalyze} disabled={isLoading} className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-sm bg-indigo-600/80 hover:bg-indigo-600 disabled:bg-indigo-900/50 disabled:cursor-not-allowed transition-colors rounded-md">
+                        <BrainIcon /> Analyze Personality
+                    </button>
+                </div>
+            ) : (
+                <div className="bg-gray-800/60 rounded-lg p-4 space-y-4">
+                    <div className="flex items-baseline gap-3">
+                        <h4 className="text-3xl font-bold text-indigo-400">{mbtiProfile.type}</h4>
+                        <p className="text-md text-gray-400">{mbtiProfile.typeName}</p>
+                    </div>
+                    <div className="flex flex-col md:flex-row items-center gap-4">
+                        <div className="flex-shrink-0">
+                            <RadarChart data={radarData} size={150} />
+                        </div>
+                        <p className="text-xs text-gray-300 leading-relaxed">{mbtiProfile.description}</p>
+                    </div>
+                     <button onClick={onAnalyze} disabled={isLoading} className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700/50 disabled:cursor-not-allowed transition-colors rounded-md">
+                        <BrainIcon /> Re-analyze
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 const HistoryPanel: React.FC<{
   previousParameters: (PersonaState & { id?: string }) | null;
@@ -351,10 +401,10 @@ const AiToolsPanel: React.FC<{
                     <div className="flex flex-col bg-gray-800/60 rounded-lg p-3 overflow-y-auto">
                         <h4 className="text-md font-semibold text-gray-300 mb-2">Live Preview</h4>
                         <div className="space-y-2 text-xs">
-                        {Object.entries(emptyPersona).filter(([key]) => key !== 'summary' && key !== 'sources').map(([key]) => (
+                        {Object.entries(emptyPersona).filter(([key]) => key !== 'summary' && key !== 'sources' && key !== 'mbtiProfile').map(([key]) => (
                             <div key={key}>
                             <label className="text-xs font-medium text-gray-400 capitalize">{key}</label>
-                            <p className="w-full bg-gray-900/50 rounded-md p-1.5 mt-1 text-gray-300 min-h-[1.8rem]">{parameters[key as keyof Omit<PersonaState, 'summary' | 'sources'>] || <span className="text-gray-500">...</span>}</p>
+                            <p className="w-full bg-gray-900/50 rounded-md p-1.5 mt-1 text-gray-300 min-h-[1.8rem]">{parameters[key as keyof Omit<PersonaState, 'summary' | 'sources' | 'mbtiProfile'>] || <span className="text-gray-500">...</span>}</p>
                             </div>
                         ))}
                         </div>
@@ -475,6 +525,20 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
     }
   };
   
+  const handleAnalyzeMbti = async () => {
+    setError(null);
+    setIsLoading(true);
+    setLoadingMessage("AI is analyzing personality...");
+    try {
+        const mbtiProfile = await geminiService.generateMbtiProfile(parameters);
+        setParameters(prev => ({ ...prev, mbtiProfile }));
+    } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to analyze MBTI profile.");
+    } finally {
+        setIsLoading(false);
+    }
+  };
+  
   const handleSave = async () => {
     if (!parameters.name) { setError("Persona name is required."); return; }
     setIsLoading(true);
@@ -547,24 +611,32 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
                 {/* Desktop View */}
                 <div className={`hidden md:grid gap-6 grid-cols-3`}>
                   <div className="bg-gray-900/50 p-4 rounded-lg"><ParametersPanel parameters={parameters} handleParamChange={handleParamChange}/></div>
-                  <div className="bg-gray-900/50 p-4 rounded-lg flex flex-col"><SummaryPanel 
+                  <div className="bg-gray-900/50 p-4 rounded-lg flex flex-col gap-6">
+                    <SummaryPanel 
                       parameters={parameters} 
                       handleSummaryChange={handleSummaryChange}
                       isLoading={isLoading}
                       handleGenerateSummary={handleGenerateSummary}
                       handleSyncFromSummary={handleSyncFromSummary}
+                    />
+                    <MbtiPanel 
+                        mbtiProfile={parameters.mbtiProfile}
+                        isLoading={isLoading}
+                        onAnalyze={handleAnalyzeMbti}
+                    />
+                  </div>
+                  <div className="bg-gray-900/50 p-4 rounded-lg flex flex-col"><HistoryPanel 
+                      previousParameters={previousParameters}
+                      handleUndo={handleUndo}
+                      initialPersona={initialPersona}
+                      handleRevert={handleRevert}
                     /></div>
-                    <div className="bg-gray-900/50 p-4 rounded-lg flex flex-col"><HistoryPanel 
-                        previousParameters={previousParameters}
-                        handleUndo={handleUndo}
-                        initialPersona={initialPersona}
-                        handleRevert={handleRevert}
-                      /></div>
                 </div>
                  {/* Mobile View - simplified to a single scrollable column */}
                 <div className="md:hidden space-y-6 p-4">
                      <ParametersPanel parameters={parameters} handleParamChange={handleParamChange}/>
                      <SummaryPanel parameters={parameters} handleSummaryChange={handleSummaryChange} isLoading={isLoading} handleGenerateSummary={handleGenerateSummary} handleSyncFromSummary={handleSyncFromSummary} />
+                     <MbtiPanel mbtiProfile={parameters.mbtiProfile} isLoading={isLoading} onAnalyze={handleAnalyzeMbti} />
                      <HistoryPanel previousParameters={previousParameters} handleUndo={handleUndo} initialPersona={initialPersona} handleRevert={handleRevert} />
                 </div>
             </div>

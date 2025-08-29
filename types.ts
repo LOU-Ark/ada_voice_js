@@ -4,6 +4,19 @@ export interface WebSource {
   uri: string;
 }
 
+// Represents the MBTI profile of a persona
+export interface MbtiProfile {
+  type: string; // e.g., "INFJ"
+  typeName: string; // e.g., "Advocate"
+  description: string;
+  scores: {
+    mind: number;     // 0 (I) to 100 (E)
+    energy: number;   // 0 (S) to 100 (N)
+    nature: number;   // 0 (T) to 100 (F)
+    tactics: number;  // 0 (J) to 100 (P)
+  };
+}
+
 // Represents the core editable properties of a persona
 export interface PersonaState {
   name: string;
@@ -15,6 +28,7 @@ export interface PersonaState {
   other: string; // New field for other free-form notes
   summary: string;
   sources?: WebSource[]; // Added for web sources
+  mbtiProfile?: MbtiProfile; // Added for MBTI analysis
 }
 
 // Represents a single entry in the persona's history
