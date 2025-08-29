@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Persona, PersonaState, ChatMessage, WebSource, PersonaCreationChatMessage, PersonaCreationChatResponse } from '../types';
 
@@ -154,38 +155,46 @@ ${JSON.stringify(newState, null, 2)}
     }
 };
 
+export const generateRefinementWelcomeMessage = async (personaState: PersonaState): Promise<string> => {
+    const prompt = `あなたは以下の設定を持つキャラクターです。
+---
+${JSON.stringify({ name: personaState.name, role: personaState.role, tone: personaState.tone, personality: personaState.personality }, null, 2)}
+---
+これから、あなた自身の詳細設定をユーザーが対話形式で調整します。その開始にあたり、ユーザーに機能説明を兼ねた挨拶をしてください。
+あなたのキャラクターとして、自然な口調で話してください。返答には、以下の要素を必ず含めてください。
+
+1.  自己紹介（例：「わたくし、〇〇ですわ」）
+2.  これから対話によって自分の設定が変更できることの説明
+3.  設定変更の具体例を2つ提示（例：「もっと皮肉屋にして」「丁寧な口調に変えて」など）
+
+上記の要素を盛り込み、自然な一つの挨拶文として返答してください。返答は挨拶の文章のみで、他のテキストは含めないでください。`;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error generating refinement welcome message:", error);
+        throw new Error("Failed to generate welcome message from AI.");
+    }
+};
+
 export const continuePersonaCreationChat = async (
   history: PersonaCreationChatMessage[],
   currentParams: Partial<PersonaState>
 ): Promise<PersonaCreationChatResponse> => {
-  const personaCreationSchema = {
-    type: Type.OBJECT,
-    properties: {
-      responseText: { type: Type.STRING, description: "AIの次の返答。ユーザーへの質問や提案を日本語で行う。" },
-      updatedParameters: {
-        type: Type.OBJECT,
-        description: "会話に基づいて更新されたペルソナのパラメータ。新規または変更されたフィールドのみ含む。",
-        properties: {
-          name: { type: Type.STRING, description: "キャラクターの名前" },
-          role: { type: Type.STRING, description: "キャラクターの役割や職業" },
-          tone: { type: Type.STRING, description: "キャラクターの口調や話し方" },
-          personality: { type: Type.STRING, description: "キャラクターの性格" },
-          worldview: { type: Type.STRING, description: "キャラクターが生きる世界の背景設定" },
-          experience: { type: Type.STRING, description: "キャラクターの過去の経験や経歴" },
-          other: { type: Type.STRING, description: "その他の自由記述設定" },
-        },
-      }
-    },
-    required: ["responseText", "updatedParameters"]
-  };
-
   const systemInstruction = `あなたは、ユーザーがキャラクター（ペルソナ）を作成するのを手伝う、創造的なアシスタントです。会話を通じてキャラクターの詳細を具体化することが目的です。
 - ユーザーと日本語でフレンドリーな会話をしてください。
 - ペルソナの各項目（名前、役割、口調など）を埋めるために、一度に一つずつ、明確な質問を投げかけてください。
 - ユーザーの回答に基づいて、'updatedParameters'オブジェクトを更新してください。新規追加または変更された項目のみを含めてください。
 - ユーザーが専門的な知識（歴史上の人物、特定の舞台設定など）を必要とするトピックを提示した場合、Google Searchを使って情報を収集し、具体的な提案を行ってください。
-- あなたの返答（responseText）は、会話を次に進めるためのガイドとなるようにしてください。
-- 全てのプロセスは対話形式で進みます。一度に全ての項目を埋めようとしないでください。
+
+あなたの応答は、必ず単一の有効なJSONオブジェクトでなければなりません。JSONの前後に他のテキストやマークダウンの囲みを含めないでください。
+JSONオブジェクトは次の2つのキーを持つ必要があります:
+1. "responseText": (string) ユーザーへの会話形式の返答（日本語）。
+2. "updatedParameters": (object) 更新または追加されたペルソナのパラメータのみを含むオブジェクト。このオブジェクトの各値は必ず文字列でなければなりません。
 
 現在のペルソナの状態:
 ${JSON.stringify(currentParams, null, 2)}
@@ -203,12 +212,25 @@ ${JSON.stringify(currentParams, null, 2)}
       config: {
         systemInstruction,
         tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: personaCreationSchema,
       },
     });
 
-    const jsonText = response.text.trim();
+    let jsonText = response.text.trim();
+    
+    // The model might wrap the JSON in markdown or conversational text.
+    // First, check for markdown code blocks.
+    const markdownMatch = jsonText.match(/```(json)?\s*([\s\S]*?)\s*```/);
+    if (markdownMatch && markdownMatch[2]) {
+        jsonText = markdownMatch[2];
+    } else {
+        // If no markdown, try to find the first '{' and last '}' to extract the JSON object.
+        const firstBrace = jsonText.indexOf('{');
+        const lastBrace = jsonText.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+            jsonText = jsonText.substring(firstBrace, lastBrace + 1);
+        }
+    }
+
     if (!jsonText) {
       throw new Error("AI returned an empty response.");
     }

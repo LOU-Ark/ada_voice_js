@@ -7,6 +7,7 @@ import { SendIcon, PlusIcon, VolumeUpIcon, CogIcon, MicrophoneIcon } from './ico
 interface ProductionChatProps {
   personas: Persona[];
   onAddPersona: () => void;
+  initialPersonaId?: string;
   voices: Voice[];
   onManageVoices: () => void;
 }
@@ -30,8 +31,8 @@ if (recognition) {
     recognition.interimResults = false;
 }
 
-export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddPersona, voices, onManageVoices }) => {
-    const [selectedPersonaId, setSelectedPersonaId] = useState<string>('default');
+export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddPersona, initialPersonaId, voices, onManageVoices }) => {
+    const [selectedPersonaId, setSelectedPersonaId] = useState<string>(initialPersonaId || 'default');
     const [selectedVoiceId, setSelectedVoiceId] = useState<string>('none');
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [userInput, setUserInput] = useState('');
@@ -41,16 +42,13 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
     const chatBoxRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     
+    // Sync selected persona with prop from parent
     useEffect(() => {
-      setChatHistory([{ role: 'model', parts: [{ text: 'こんにちは！何かお話ししましょう。' }] }]);
-    }, []);
-
-    useEffect(() => {
-        if (chatBoxRef.current) {
-            chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
+        if (initialPersonaId && initialPersonaId !== selectedPersonaId) {
+            setSelectedPersonaId(initialPersonaId);
         }
-    }, [chatHistory]);
-    
+    }, [initialPersonaId, selectedPersonaId]);
+
     const stopPlayback = useCallback(() => {
         if (audioRef.current) {
             audioRef.current.pause();
@@ -60,6 +58,21 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
             audioRef.current = null;
         }
     },[]);
+    
+    // Reset chat history when persona changes
+    useEffect(() => {
+        const activePersona = personas.find(p => p.id === selectedPersonaId) || defaultPersonaState;
+        setChatHistory([{ role: 'model', parts: [{ text: `こんにちは、${activePersona.name}です。何かお話ししましょう。` }] }]);
+        stopPlayback();
+    }, [selectedPersonaId, personas, stopPlayback]);
+
+    // Scroll to bottom on new message
+    useEffect(() => {
+        if (chatBoxRef.current) {
+            chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
+        }
+    }, [chatHistory]);
+    
 
     const speak = useCallback(async (text: string) => {
         const voice = voices.find(v => v.id === selectedVoiceId);
@@ -138,16 +151,26 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
     };
     
     const handlePersonaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newPersonaId = e.target.value;
-        setSelectedPersonaId(newPersonaId);
-        const activePersona = personas.find(p => p.id === newPersonaId) || defaultPersonaState;
-        setChatHistory([{ role: 'model', parts: [{ text: `こんにちは、${activePersona.name}です。何かお話ししましょう。` }] }]);
-        stopPlayback();
+        const value = e.target.value;
+        if (value === 'add_new_persona') {
+            onAddPersona();
+            // The select is a controlled component, so its value will not change
+            // unless we update the state. By not updating state here, it remains
+            // on the previously selected persona visually.
+        } else {
+            setSelectedPersonaId(value);
+        }
     };
 
     const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setSelectedVoiceId(e.target.value);
-        stopPlayback();
+        const value = e.target.value;
+        if (value === 'manage_voices') {
+            onManageVoices();
+             // The select is a controlled component, so its value will not change.
+        } else {
+            setSelectedVoiceId(value);
+            stopPlayback();
+        }
     };
 
     const handleToggleListen = () => {
@@ -192,13 +215,15 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
                      <select id="persona-select" value={selectedPersonaId} onChange={handlePersonaChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <option value="default">Default Assistant</option>
                         {personas.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                        <option value="" disabled>──────────</option>
+                        <option value="add_new_persona" className="font-semibold text-indigo-400">+ New Persona</option>
                     </select>
-                    <button onClick={onAddPersona} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 transition-colors rounded-md text-sm"><PlusIcon /> Add Persona</button>
                     <select id="voice-select" value={selectedVoiceId} onChange={handleVoiceChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <option value="none">No Voice</option>
                         {voices.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
+                        <option value="" disabled>──────────</option>
+                        <option value="manage_voices" className="font-semibold text-indigo-400">+ New Voice</option>
                     </select>
-                    <button onClick={onManageVoices} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 transition-colors rounded-md text-sm"><CogIcon/> Manage Voices</button>
                 </div>
             </header>
 
