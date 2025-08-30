@@ -25,7 +25,13 @@ export default async function handler(req: any, res: any) {
         let voiceId: string;
 
         if (voiceConfigId === 'default_voice') {
-            token = process.env.FISH_AUDIO_DEFAULT_TOKEN || '';
+            const defaultToken = process.env.FISH_AUDIO_DEFAULT_TOKEN;
+            if (!defaultToken) {
+                const errorMessage = "Server configuration error: The default voice is enabled, but FISH_AUDIO_DEFAULT_TOKEN is not set on the server.";
+                console.error(errorMessage);
+                return res.status(500).json({ error: "Server Configuration Error", message: errorMessage });
+            }
+            token = defaultToken;
             voiceId = requestVoiceId; // This is the default voice ID from env, passed by client
         } else {
             token = requestToken;
