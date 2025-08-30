@@ -61,7 +61,7 @@ const generateWithSchema = async <T,>(prompt: string): Promise<T> => {
     }
 }
 
-export const createPersonaFromWeb = async (topic: string): Promise<{ personaState: Omit<PersonaState, 'summary'>, sources: WebSource[] }> => {
+export const createPersonaFromWeb = async (topic: string): Promise<{ personaState: Omit<PersonaState, 'summary' | 'shortSummary'>, sources: WebSource[] }> => {
     // Step 1: Search the web and synthesize information.
     const searchPrompt = `ウェブで「${topic}」に関する情報を検索してください。その情報を統合し、キャラクタープロファイル作成に適した詳細な説明文を日本語で生成してください。考えられる背景、性格、口調、そして特徴的な経験についての詳細を含めてください。`;
 
@@ -93,7 +93,7 @@ export const createPersonaFromWeb = async (topic: string): Promise<{ personaStat
     // Step 2: Extract parameters from the synthesized text.
     const extractionPrompt = `以下のテキストに基づいて、指定されたJSONフォーマットでキャラクターのパラメータを日本語で抽出しなさい。\n\n---\n\n${synthesizedText}`;
     
-    const extractedParams = await generateWithSchema<Omit<PersonaState, 'summary' | 'sources'>>(extractionPrompt);
+    const extractedParams = await generateWithSchema<Omit<PersonaState, 'summary' | 'sources' | 'shortSummary'>>(extractionPrompt);
 
     const finalPersonaState = {
         ...extractedParams,
@@ -118,7 +118,7 @@ export const updateParamsFromSummary = async (summaryText: string): Promise<Pers
 };
 
 export const generateSummaryFromParams = async (params: PersonaState): Promise<string> => {
-    const prompt = `以下のJSONデータで定義されたキャラクターについて、魅力的で自然な紹介文を日本語で作成してください。'other'フィールドに補足情報があれば、それも内容に含めてください。文章のみを返してください。\n\n---\n\n${JSON.stringify(params, null, 2)}`;
+    const prompt = `以下のJSONデータで定義されたキャラクターについて、そのキャラクターの視点から語られるような、魅力的で物語性のある紹介文を日本語で作成してください。'other'フィールドに補足情報があれば、それも内容に含めてください。文章のみを返してください。\n\n---\n\n${JSON.stringify(params, null, 2)}`;
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
@@ -131,7 +131,39 @@ export const generateSummaryFromParams = async (params: PersonaState): Promise<s
     }
 };
 
-export const generateChangeSummary = async (oldState: PersonaState, newState: PersonaState): Promise<string> => {
+export const generateShortSummary = async (fullSummary: string): Promise<string> => {
+    if (!fullSummary.trim()) return "";
+    const prompt = `以下の文章を日本語で約50字に要約してください。:\n\n---\n\n${fullSummary}`;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error generating short summary:", error);
+        // Fallback to truncating on error
+        return fullSummary.substring(0, 50) + (fullSummary.length > 50 ? '...' : '');
+    }
+};
+
+export const generateShortTone = async (fullTone: string): Promise<string> => {
+    if (!fullTone.trim()) return "";
+    const prompt = `以下の口調に関する説明文を、その特徴を捉えつつ日本語で約50字に要約してください。:\n\n---\n\n${fullTone}`;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error generating short tone:", error);
+        // Fallback to truncating on error
+        return fullTone.substring(0, 50) + (fullTone.length > 50 ? '...' : '');
+    }
+};
+
+export const generateChangeSummary = async (oldState: Partial<PersonaState>, newState: Partial<PersonaState>): Promise<string> => {
     const prompt = `以下の二つのキャラクター設定JSONを比較し、古いバージョンから新しいバージョンへの変更点を日本語で簡潔に一言で要約してください。
 
 古いバージョン:
@@ -160,6 +192,8 @@ export const generateMbtiProfile = async (personaState: PersonaState): Promise<M
     delete personaData.mbtiProfile; // Avoid circular analysis
     delete personaData.sources;
     delete personaData.summary; // Use the core parameters for analysis
+    delete personaData.shortSummary;
+    delete personaData.shortTone;
 
     const prompt = `以下のキャラクター設定を分析し、マイヤーズ・ブリッグス・タイプ指標（MBTI）プロファイルを日本語で生成してください。
 キャラクターの視点から書かれた短い説明を含めてください。

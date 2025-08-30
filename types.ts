@@ -27,6 +27,8 @@ export interface PersonaState {
   experience: string;
   other: string; // New field for other free-form notes
   summary: string;
+  shortSummary?: string; // New field for card summary
+  shortTone?: string; // New field for card tone summary
   sources?: WebSource[]; // Added for web sources
   mbtiProfile?: MbtiProfile; // Added for MBTI analysis
 }

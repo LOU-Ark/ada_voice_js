@@ -1,10 +1,9 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { Persona, PersonaState, PersonaHistoryEntry, Voice } from './types';
 import { PersonaEditorModal, CreatePersonaModal } from './components/PersonaEditorModal';
 import { PersonaList } from './components/PersonaList';
 import { ProductionChat } from './components/ProductionChat';
-import { PlusIcon, EditIcon, ChatBubbleIcon } from './components/icons';
+import { PlusIcon, EditIcon, ChatBubbleIcon, BackIcon } from './components/icons';
 import * as geminiService from './services/geminiService';
 import { VoiceManagerModal } from './components/VoiceManagerModal';
 import { Loader } from './components/Loader';
@@ -22,6 +21,8 @@ const App: React.FC = () => {
       experience: 'ご主人様の完璧な会話相手兼アシスタントとして作られましたのよ。',
       other: '紅茶とクラシック音楽をこよなく愛しておりますわ。',
       summary: 'ご主人様にお仕えするために作られた、お嬢様言葉を話すロボットプログラム、エルと申しますわ。常にエレガントな立ち振る舞いを心がけておりますが、時折、機械的な思考が顔を出すこともあるかもしれませんの。紅茶を淹れるのが得意でしてよ。どうぞ、お気軽にお申し付けくださいまし。',
+      shortSummary: 'ご主人様にお仕えする、お嬢様言葉のロボットプログラムですわ。',
+      shortTone: '過剰なお嬢様言葉（〜ですわ、〜ですの）を多用します。',
       history: []
     }
   ];
@@ -96,11 +97,19 @@ const App: React.FC = () => {
   }, []);
 
   const handleSavePersona = useCallback(async (personaToSave: PersonaState & { id?: string }) => {
-    const existingPersona = personas.find(p => p.id === personaToSave.id);
+    const shortSummary = personaToSave.summary 
+        ? await geminiService.generateShortSummary(personaToSave.summary)
+        : '';
+    const shortTone = personaToSave.tone
+        ? await geminiService.generateShortTone(personaToSave.tone)
+        : '';
+    
+    const personaWithSummaries = { ...personaToSave, shortSummary, shortTone };
+    const existingPersona = personas.find(p => p.id === personaWithSummaries.id);
     
     if (existingPersona) {
       // Update existing persona and save history
-      const oldState: PersonaState = {
+      const oldState: Omit<PersonaState, 'shortSummary' | 'shortTone'> = {
         name: existingPersona.name,
         role: existingPersona.role,
         tone: existingPersona.tone,
@@ -109,9 +118,11 @@ const App: React.FC = () => {
         experience: existingPersona.experience,
         other: existingPersona.other,
         summary: existingPersona.summary,
+        mbtiProfile: existingPersona.mbtiProfile,
+        sources: existingPersona.sources
       };
 
-      const changeSummary = await geminiService.generateChangeSummary(oldState, personaToSave);
+      const changeSummary = await geminiService.generateChangeSummary(oldState, personaWithSummaries);
       
       const newHistoryEntry: PersonaHistoryEntry = {
         state: oldState,
@@ -123,7 +134,7 @@ const App: React.FC = () => {
 
       const updatedPersona: Persona = {
         ...existingPersona,
-        ...personaToSave,
+        ...personaWithSummaries,
         history: updatedHistory,
       };
       
@@ -132,7 +143,7 @@ const App: React.FC = () => {
     } else {
       // Create new persona
       const newPersona: Persona = {
-        ...personaToSave,
+        ...personaWithSummaries,
         id: Date.now().toString(),
         history: [],
       };
@@ -187,20 +198,25 @@ const App: React.FC = () => {
       {isLoading && <Loader message={loadingMessage} />}
       <div className={`container mx-auto px-4 py-8 ${activeView === 'chat' ? 'flex flex-col h-screen max-h-screen' : ''}`}>
         <header className="flex-shrink-0">
-          <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
-            <div className="text-center md:text-left">
-              <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-600">
-                Interactive Persona Editor
-              </h1>
-              <p className="text-gray-400 mt-1">AI-powered character creation studio.</p>
-            </div>
-            <div className="flex flex-col sm:flex-row items-center gap-4 self-center md:self-auto">
-              <div className="flex items-center gap-1 bg-gray-800 p-1 rounded-lg">
-                  <button onClick={() => setActiveView('editor')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeView === 'editor' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}><EditIcon /> Editor</button>
-                  <button onClick={() => setActiveView('chat')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeView === 'chat' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}><ChatBubbleIcon /> Chat</button>
-              </div>
-            </div>
-          </div>
+          <div className="flex justify-between items-center mb-6">
+            {activeView === 'editor' ? (
+                <div className="text-center md:text-left">
+                    <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-600">
+                        Interactive Persona Editor
+                    </h1>
+                    <p className="text-gray-400 mt-1">AI-powered character creation studio.</p>
+                </div>
+            ) : (
+                <div className="flex items-center gap-4">
+                    <button onClick={() => setActiveView('editor')} className="text-gray-400 hover:text-white p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Back to persona list">
+                        <BackIcon />
+                    </button>
+                    <h1 className="text-2xl font-bold text-white">
+                        Chat
+                    </h1>
+                </div>
+            )}
+        </div>
         </header>
 
         <main className={`${activeView === 'chat' ? 'flex-grow overflow-hidden' : ''}`}>

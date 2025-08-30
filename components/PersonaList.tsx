@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Persona } from '../types';
 import { EditIcon, TrashIcon, ChatBubbleIcon, PlusIcon, DownloadIcon } from './icons';
@@ -40,27 +39,39 @@ export const PersonaList: React.FC<PersonaListProps> = ({ personas, onEdit, onDe
         <span className="mt-2 font-semibold">New Persona</span>
       </button>
       {personas.map(persona => (
-        <div key={persona.id} className="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col justify-between transition-transform transform hover:-translate-y-1">
+        <div 
+          key={persona.id} 
+          className="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col justify-between transition-all transform hover:-translate-y-1 hover:shadow-indigo-500/30 cursor-pointer"
+          onClick={() => onChat(persona.id)}
+        >
           <div>
-            <div className="flex items-baseline gap-3 mb-1">
-              <h3 className="text-xl font-bold text-indigo-400">{persona.name}</h3>
-              {persona.mbtiProfile?.type && (
-                <span className="px-2 py-0.5 bg-indigo-500/30 text-indigo-300 text-xs font-semibold rounded-full">
-                  {persona.mbtiProfile.type}
+            <h3 className="text-xl font-bold text-indigo-400 truncate" title={persona.name}>
+              {persona.name}
+            </h3>
+            <p className="text-sm text-gray-300 mt-2" title={persona.summary}>
+              {persona.shortSummary || 
+                (persona.summary 
+                  ? `${persona.summary.substring(0, 50)}${persona.summary.length > 50 ? '...' : ''}`
+                  : <span className="italic text-gray-500">No summary available.</span>
+                )
+              }
+            </p>
+            <div className="mt-4 pt-2 border-t border-gray-700/50">
+                <span className="text-xs font-semibold text-gray-500 mr-2">口調:</span>
+                <span className="text-sm text-indigo-300 italic" title={persona.tone}>
+                  {persona.shortTone || 
+                    (persona.tone 
+                      ? `${persona.tone.substring(0, 50)}${persona.tone.length > 50 ? '...' : ''}`
+                      : "未設定"
+                    )
+                  }
                 </span>
-              )}
-            </div>
-            <p className="text-sm text-gray-400 mb-4">{persona.role}</p>
-            <div className="space-y-2 text-sm">
-                <p><strong className="font-semibold text-gray-300">Tone:</strong> <span className="text-gray-400">{persona.tone}</span></p>
-                <p><strong className="font-semibold text-gray-300">Personality:</strong> <span className="text-gray-400">{persona.personality}</span></p>
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-6">
-            <button onClick={() => onChat(persona.id)} title="Chat with this Persona" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"><ChatBubbleIcon /></button>
-            <button onClick={() => onEdit(persona)} title="Edit this Persona" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"><EditIcon /></button>
-            <button onClick={() => onExport(persona)} title="Export this Persona" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"><DownloadIcon /></button>
-            <button onClick={() => persona.id && onDelete(persona.id)} title="Delete this Persona" className="p-2 text-gray-400 hover:text-red-500 hover:bg-gray-700 rounded-full transition-colors"><TrashIcon /></button>
+            <button onClick={(e) => { e.stopPropagation(); onEdit(persona); }} title="Edit this Persona" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"><EditIcon /></button>
+            <button onClick={(e) => { e.stopPropagation(); onExport(persona); }} title="Export this Persona" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"><DownloadIcon /></button>
+            <button onClick={(e) => { e.stopPropagation(); persona.id && onDelete(persona.id); }} title="Delete this Persona" className="p-2 text-gray-400 hover:text-red-500 hover:bg-gray-700 rounded-full transition-colors"><TrashIcon /></button>
           </div>
         </div>
       ))}
