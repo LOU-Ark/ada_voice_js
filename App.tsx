@@ -93,7 +93,14 @@ const App: React.FC = () => {
   }, []);
   
   const allVoices = useMemo(() => {
-    return [...(defaultVoice ? [defaultVoice] : []), ...voices];
+    // If a default voice is provided by the server, filter out any custom voices
+    // with the same name to prevent duplicates in the dropdown.
+    const filteredCustomVoices = defaultVoice
+      ? voices.filter(v => v.name !== defaultVoice.name)
+      : voices;
+      
+    // The final list prioritizes the default voice.
+    return [...(defaultVoice ? [defaultVoice] : []), ...filteredCustomVoices];
   }, [voices, defaultVoice]);
 
 
