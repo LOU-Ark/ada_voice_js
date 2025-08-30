@@ -130,7 +130,7 @@ const generateWithSchema = async <T,>(prompt: string, schema: any): Promise<T> =
             },
         });
 
-        const jsonText = response.text.trim();
+        const jsonText = response.text?.trim() ?? '';
         if (!jsonText) throw new Error("AI returned an empty response.");
         return JSON.parse(jsonText) as T;
     } catch (error) {
@@ -150,7 +150,7 @@ async function createPersonaFromWeb(topic: string): Promise<{ personaState: Omit
         config: { tools: [{ googleSearch: {} }] },
     });
 
-    const synthesizedText = searchResponse.text;
+    const synthesizedText = searchResponse.text ?? '';
     const groundingChunks = searchResponse.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
     const sources: WebSource[] = groundingChunks
@@ -183,61 +183,101 @@ async function updateParamsFromSummary(summaryText: string): Promise<PersonaStat
 async function generateSummaryFromParams(params: PersonaState): Promise<string> {
     const prompt = `以下のJSONデータで定義されたキャラクターについて、そのキャラクターの視点から語られるような、魅力的で物語性のある紹介文を日本語で作成してください。'other'フィールドに補足情報があれば、それも内容に含めてください。文章のみを返してください。\n\n---\n\n${JSON.stringify(params, null, 2)}`;
     const response = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: prompt });
-    return response.text;
+    return response.text ?? '';
 };
 
 async function generateShortSummary(fullSummary: string): Promise<string> {
     if (!fullSummary.trim()) return "";
     const prompt = `以下の文章を日本語で約50字に要約してください。:\n\n---\n\n${fullSummary}`;
     const response = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: prompt });
-    return response.text.trim();
+    return response.text?.trim() ?? '';
 };
 
 async function generateShortTone(fullTone: string): Promise<string> {
     if (!fullTone.trim()) return "";
     const prompt = `以下の口調に関する説明文を、その特徴を捉えつつ日本語で約50字に要約してください。:\n\n---\n\n${fullTone}`;
     const response = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: prompt });
-    return response.text.trim();
+    return response.text?.trim() ?? '';
 };
 
 async function generateChangeSummary(oldState: Partial<PersonaState>, newState: Partial<PersonaState>): Promise<string> {
     const prompt = `以下の二つのキャラクター設定JSONを比較し、古いバージョンから新しいバージョンへの変更点を日本語で簡潔に一言で要約してください。\n\n古いバージョン:\n${JSON.stringify(oldState, null, 2)}\n\n新しいバージョン:\n${JSON.stringify(newState, null, 2)}\n\n要約:`;
     const response = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: prompt });
-    return response.text.trim() || "パラメータが更新されました。";
+    return response.text?.trim() || "パラメータが更新されました。";
 };
 
 async function generateMbtiProfile(personaState: PersonaState): Promise<MbtiProfile> {
-    const personaData = { ...personaState };
-    delete personaData.mbtiProfile;
-    delete personaData.sources;
-    delete personaData.summary;
-    delete personaData.shortSummary;
-    delete personaData.shortTone;
+    // Safely create a new object for the prompt without the properties we want to exclude,
+    // avoiding the 'delete' operator which was causing build issues.
+    const {
+        mbtiProfile,
+        sources,
+        summary,
+        shortSummary,
+        shortTone,
+        voiceId,
+        ...promptData
+    } = personaState;
 
-    const prompt = `以下のキャラクター設定を分析し、マイヤーズ・ブリッグス・タイプ指標（MBTI）プロファイルを日本語で生成してください...\n\nキャラクター設定:\n${JSON.stringify(personaData, null, 2)}`;
+    const prompt = `以下のキャラクター設定を分析し、マイヤーズ・ブリッグス・タイプ指標（MBTI）プロファイルを日本語で生成してください。JSONスキーマに厳密に従ってください。\n\nキャラクター設定:\n${JSON.stringify(promptData, null, 2)}`;
     return await generateWithSchema(prompt, mbtiProfileSchema);
 };
 
 async function generateRefinementWelcomeMessage(personaState: PersonaState): Promise<string> {
-    const prompt = `あなたは以下の設定を持つキャラクターです。\n---\n${JSON.stringify({ name: personaState.name, role: personaState.role, tone: personaState.tone, personality: personaState.personality }, null, 2)}\n---\nこれから、あなた自身の詳細設定をユーザーが対話形式で調整します。その開始にあたり、ユーザーに機能説明を兼ねた挨拶をしてください...\n挨拶文は簡潔に、全体で80文字以内にまとめてください。`;
+    const prompt = `あなたは以下の設定を持つキャラクターです。\n---\n${JSON.stringify({ name: personaState.name, role: personaState.role, tone: personaState.tone, personality: personaState.personality }, null, 2)}\n---\nこれから、あなた自身の詳細設定をユーザーが対話形式で調整します。その開始にあたり、ユーザーに機能説明を兼ねた挨拶をしてください。あなたの口調で、自己紹介と、これから対話を通じて自身の設定を更新できることを伝えてください。挨拶文は簡潔に、全体で80文字以内にまとめてください。`;
     const response = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: prompt });
-    return response.text;
+    return response.text ?? '';
 };
 
 async function continuePersonaCreationChat(history: PersonaCreationChatMessage[], currentParams: Partial<PersonaState>): Promise<PersonaCreationChatResponse> {
-  const systemInstruction = `あなたは、ユーザーがキャラクター（ペルソナ）を作成するのを手伝う、創造的なアシスタントです...`;
-  const conversationHistory = history.map(msg => ({ role: msg.role, parts: [{ text: msg.text }] }));
+  const systemInstruction = `あなたは、ユーザーがキャラクター（ペルソナ）を作成するのを手伝う、創造的なアシスタントです。ユーザーからの曖昧な指示を解釈し、それを具体的なキャラクターパラメータに変換して、指定されたJSON形式で返答する役割を担います。
+
+**ルール:**
+1.  **応答フォーマット:** あなたの応答は、必ず以下の構造を持つ単一のJSONオブジェクトでなければなりません。
+    \`\`\`json
+    {
+      "responseText": "ユーザーへの返信メッセージ（あなたの声で）",
+      "updatedParameters": {
+        "name": "更新された名前",
+        "role": "更新された役割",
+        "tone": "更新された口調",
+        "personality": "更新された性格",
+        "worldview": "更新された世界観",
+        "experience": "更新された経歴",
+        "other": "更新されたその他の設定"
+      }
+    }
+    \`\`\`
+2.  **responseText:** ユーザーへのフレンドリーな確認メッセージや、創造的な提案を含めてください。これはUIに表示されます。
+3.  **updatedParameters:** ユーザーの指示に基づいて変更されたパラメータのみを含めてください。変更がないパラメータは省略します。
+4.  **現在の状態:** 現在のキャラクターの状態を考慮し、それを基に変更を加えてください。
+
+**現在のキャラクターパラメータ:**
+${JSON.stringify(currentParams, null, 2)}`;
+
+  // Convert PersonaCreationChatMessage to the format expected by the Gemini API
+  const conversationHistory = history.map(msg => ({
+    role: msg.role,
+    parts: [{ text: msg.text }]
+  }));
 
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
     contents: conversationHistory,
-    config: { systemInstruction, tools: [{ googleSearch: {} }] },
+    config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+    },
   });
 
-  let jsonText = response.text.trim();
+  let jsonText = response.text?.trim() ?? '';
+  
+  // Clean up potential markdown formatting from the response
   const markdownMatch = jsonText.match(/```(json)?\s*([\s\S]*?)\s*```/);
-  if (markdownMatch && markdownMatch[2]) jsonText = markdownMatch[2];
-  else {
+  if (markdownMatch && markdownMatch[2]) {
+    jsonText = markdownMatch[2];
+  } else {
+    // Fallback for cases where markdown isn't used but the JSON is embedded
     const firstBrace = jsonText.indexOf('{');
     const lastBrace = jsonText.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace > firstBrace) {
@@ -246,31 +286,58 @@ async function continuePersonaCreationChat(history: PersonaCreationChatMessage[]
   }
 
   try {
-    if (!jsonText) throw new Error("AI returned an empty response string.");
+    if (!jsonText) throw new Error("AI returned an empty or invalid response string.");
     const parsed = JSON.parse(jsonText);
-    return { responseText: parsed.responseText || "...", updatedParameters: parsed.updatedParameters || {} };
+    return {
+        responseText: parsed.responseText || "はい、承知いたしました。設定を更新しました。",
+        updatedParameters: parsed.updatedParameters || {}
+    };
   } catch (parseError) {
-    return { responseText: jsonText, updatedParameters: {} };
+    console.error("Failed to parse JSON from AI response:", jsonText, parseError);
+    // If parsing fails, return the raw text as a response so the user sees something
+    return {
+        responseText: jsonText || "申し訳ありません、設定を更新できませんでした。",
+        updatedParameters: {}
+    };
   }
 };
 
 async function translateNameToRomaji(name: string): Promise<string> {
-    const prompt = `Translate the following Japanese name into a single, lowercase, filename-safe romaji string... \n\nName: "${name}"\n\nRomaji:`;
+    const prompt = `Translate the following Japanese name into a single, lowercase, filename-safe romaji string. For example, 'エイダ' should become 'eida'.\n\nName: "${name}"\n\nRomaji:`;
     const response = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: prompt });
-    return response.text.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+    // Fallback logic in case the AI returns something unexpected.
+    return response.text?.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || 'persona';
 };
 
 async function getPersonaChatResponse(personaState: PersonaState, history: ChatMessage[]): Promise<string> {
-    const systemInstruction = `You are a character with the following traits. Respond as this character in Japanese.\n- Name: ${personaState.name}\n- Role: ${personaState.role}\n...`;
-    const latestMessage = history[history.length - 1]?.parts[0]?.text;
-    if (!latestMessage) throw new Error("No message provided to send.");
+    const systemInstruction = `あなたは以下の設定を持つキャラクターです。このキャラクターとして、日本語で応答してください。
+
+**キャラクター設定:**
+- **名前 (Name):** ${personaState.name}
+- **役割 (Role):** ${personaState.role}
+- **口調 (Tone):** ${personaState.tone}
+- **性格 (Personality):** ${personaState.personality}
+- **世界観 (Worldview):** ${personaState.worldview}
+- **経歴 (Experience):** ${personaState.experience}
+- **その他 (Other):** ${personaState.other}
+- **要約 (Summary):** ${personaState.summary}
+
+あなたの応答は、この設定に厳密に従ってください。`;
+
+    const latestMessageContent = history[history.length - 1]?.parts[0]?.text;
+    if (!latestMessageContent) {
+        throw new Error("No message provided to send.");
+    }
     
+    // Create a new chat session for each turn to ensure the system instruction is always fresh.
+    // This is safer than trying to manage a long-lived chat object on a serverless function.
     const chat = ai.chats.create({
         model: 'gemini-2.5-flash',
         config: { systemInstruction },
-        history: history.slice(0, -1)
+        // Pass previous valid messages to maintain context
+        history: history.slice(0, -1).filter(m => m.parts.every(p => p.text)) 
     });
     
-    const response = await chat.sendMessage({ message: latestMessage });
-    return response.text;
+    const response = await chat.sendMessage({ message: latestMessageContent });
+    return response.text ?? '...';
 };
