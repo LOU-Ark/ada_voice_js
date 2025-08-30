@@ -8,11 +8,12 @@ interface VoiceManagerModalProps {
   onClose: () => void;
   initialVoices: Voice[];
   onSave: (voices: Voice[]) => void;
+  defaultVoice: Voice | null;
 }
 
 const emptyVoice: Omit<Voice, 'id'> = { name: '', token: '', voiceId: '' };
 
-export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({ isOpen, onClose, initialVoices, onSave }) => {
+export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({ isOpen, onClose, initialVoices, onSave, defaultVoice }) => {
   const [voices, setVoices] = useState<Voice[]>(initialVoices);
   const [editingVoice, setEditingVoice] = useState<Omit<Voice, 'id'>>({ ...emptyVoice });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -88,6 +89,15 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({ isOpen, on
           {/* List of saved voices */}
           <div className="space-y-2">
             <h3 className="text-lg font-semibold text-gray-300">Saved Voices</h3>
+            {defaultVoice && (
+              <div className="flex items-center justify-between bg-gray-700/60 p-3 rounded-md border border-indigo-700/50">
+                <div className="flex-grow">
+                  <p className="font-semibold text-white">{defaultVoice.name}</p>
+                  <p className="text-xs text-indigo-400">Default Voice (from Vercel)</p>
+                </div>
+                {/* No actions for default voice */}
+              </div>
+            )}
             {voices.length > 0 ? (
                 voices.map(voice => (
                     <div key={voice.id} className="flex items-center justify-between bg-gray-700/60 p-3 rounded-md">
@@ -102,7 +112,7 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({ isOpen, on
                     </div>
                 ))
             ) : (
-                <p className="text-gray-500 text-sm">No custom voices saved yet.</p>
+                !defaultVoice && <p className="text-gray-500 text-sm">No custom voices saved yet.</p>
             )}
           </div>
         </main>

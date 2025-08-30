@@ -289,6 +289,7 @@ const App: React.FC = () => {
           onClose={() => setIsVoiceManagerOpen(false)}
           initialVoices={voices}
           onSave={handleSaveVoices}
+          defaultVoice={defaultVoice}
         />
       )}
     </div>
