@@ -166,8 +166,12 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
 
     const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const value = e.target.value;
-        setSelectedVoiceId(value);
-        stopPlayback();
+        if (value === 'add_new_voice') {
+            onOpenVoiceManager();
+        } else {
+            setSelectedVoiceId(value);
+            stopPlayback();
+        }
     };
 
     const handleToggleListen = () => {
@@ -216,15 +220,12 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
                         <option value="" disabled>──────────</option>
                         <option value="add_new_persona" className="font-semibold text-indigo-400">+ New Persona</option>
                     </select>
-                    <div className="flex items-center gap-1">
-                        <select id="voice-select" value={selectedVoiceId} onChange={handleVoiceChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-grow">
-                            <option value="none">No Voice</option>
-                            {voices.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
-                        </select>
-                         <button onClick={onOpenVoiceManager} className="p-2 flex-shrink-0 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors" aria-label="Manage voices">
-                            <CogIcon />
-                        </button>
-                    </div>
+                    <select id="voice-select" value={selectedVoiceId} onChange={handleVoiceChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="none">No Voice</option>
+                        {voices.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
+                        <option value="" disabled>──────────</option>
+                        <option value="add_new_voice" className="font-semibold text-indigo-400">+ Add New Voice</option>
+                    </select>
                 </div>
             </header>
 
