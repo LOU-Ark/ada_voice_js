@@ -3,22 +3,26 @@
 // and forwards the request to the Fish Audio API. This avoids exposing the API
 // token to the browser and bypasses CORS issues.
 
-export default async function handler(req: Request) {
+// The `any` types are used here because we cannot import Vercel's specific types
+// in this environment. In a typical Vercel project, you would use:
+// import type { VercelRequest, VercelResponse } from '@vercel/node';
+// This handler is now compatible with Vercel's Node.js runtime.
+
+// FIX: Declare Buffer to resolve TypeScript error when Node.js global types are not available.
+declare const Buffer: { from(data: ArrayBuffer): any; };
+
+export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
-            status: 405,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        res.setHeader('Allow', ['POST']);
+        return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
     try {
-        const { text, token, voiceId } = await req.json();
+        // In a Vercel Node.js environment, the body is pre-parsed on `req.body`.
+        const { text, token, voiceId } = req.body;
 
         if (!text || !token || !voiceId) {
-            return new Response(JSON.stringify({ error: 'Missing required parameters: text, token, voiceId' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' },
-            });
+            return res.status(400).json({ error: 'Missing required parameters: text, token, voiceId' });
         }
 
         const API_URL = "https://api.fish.audio/v1/tts";
@@ -34,15 +38,12 @@ export default async function handler(req: Request) {
             }),
         });
         
-        // Check if the response from Fish Audio is successful and is audio
         if (fishAudioResponse.ok && fishAudioResponse.headers.get('Content-Type')?.includes('audio')) {
-             // Stream the audio back to the client
-            return new Response(fishAudioResponse.body, {
-                status: 200,
-                headers: {
-                    'Content-Type': fishAudioResponse.headers.get('Content-Type') || 'audio/mpeg',
-                },
-            });
+             // Convert the response body to a buffer to send it back.
+            const audioBuffer = await fishAudioResponse.arrayBuffer();
+            res.setHeader('Content-Type', fishAudioResponse.headers.get('Content-Type') || 'audio/mpeg');
+            return res.status(200).send(Buffer.from(audioBuffer));
+
         } else {
             // Fish Audio returned an error or unexpected content type
             const errorBody = await fishAudioResponse.text();
@@ -56,18 +57,12 @@ export default async function handler(req: Request) {
                     errorMessage += ` - ${errorBody}`;
                 }
             }
-             return new Response(JSON.stringify({ error: errorMessage }), {
-                status: fishAudioResponse.status,
-                headers: { 'Content-Type': 'application/json' },
-            });
+             return res.status(fishAudioResponse.status).json({ error: errorMessage });
         }
 
     } catch (error) {
         console.error("Error in /api/tts proxy:", error);
         const errorMessage = error instanceof Error ? error.message : "An unknown internal error occurred.";
-        return new Response(JSON.stringify({ error: "Internal Server Error", message: errorMessage }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return res.status(500).json({ error: "Internal Server Error", message: errorMessage });
     }
 }

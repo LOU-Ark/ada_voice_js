@@ -1,8 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Persona, PersonaState, ChatMessage, WebSource, PersonaCreationChatMessage, PersonaCreationChatResponse, MbtiProfile } from '../types';
 
-// Fix: Initialize the GoogleGenAI client using the API key from environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+// FIX: Initialize the GoogleGenAI client using the correct API key from environment variables as per guidelines.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const personaSchema = {
   type: Type.OBJECT,
@@ -41,6 +41,7 @@ const mbtiProfileSchema = {
 
 const generateWithSchema = async <T,>(prompt: string): Promise<T> => {
     try {
+        // FIX: Use 'gemini-2.5-flash' model as per guidelines.
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -65,6 +66,7 @@ export const createPersonaFromWeb = async (topic: string): Promise<{ personaStat
     // Step 1: Search the web and synthesize information.
     const searchPrompt = `ウェブで「${topic}」に関する情報を検索してください。その情報を統合し、キャラクタープロファイル作成に適した詳細な説明文を日本語で生成してください。考えられる背景、性格、口調、そして特徴的な経験についての詳細を含めてください。`;
 
+    // FIX: Use 'gemini-2.5-flash' model as per guidelines.
     const searchResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: searchPrompt,
@@ -120,6 +122,7 @@ export const updateParamsFromSummary = async (summaryText: string): Promise<Pers
 export const generateSummaryFromParams = async (params: PersonaState): Promise<string> => {
     const prompt = `以下のJSONデータで定義されたキャラクターについて、そのキャラクターの視点から語られるような、魅力的で物語性のある紹介文を日本語で作成してください。'other'フィールドに補足情報があれば、それも内容に含めてください。文章のみを返してください。\n\n---\n\n${JSON.stringify(params, null, 2)}`;
     try {
+        // FIX: Use 'gemini-2.5-flash' model as per guidelines.
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -135,6 +138,7 @@ export const generateShortSummary = async (fullSummary: string): Promise<string>
     if (!fullSummary.trim()) return "";
     const prompt = `以下の文章を日本語で約50字に要約してください。:\n\n---\n\n${fullSummary}`;
     try {
+        // FIX: Use 'gemini-2.5-flash' model as per guidelines.
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -151,6 +155,7 @@ export const generateShortTone = async (fullTone: string): Promise<string> => {
     if (!fullTone.trim()) return "";
     const prompt = `以下の口調に関する説明文を、その特徴を捉えつつ日本語で約50字に要約してください。:\n\n---\n\n${fullTone}`;
     try {
+        // FIX: Use 'gemini-2.5-flash' model as per guidelines.
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -175,6 +180,7 @@ ${JSON.stringify(newState, null, 2)}
 要約:`;
     
     try {
+        // FIX: Use 'gemini-2.5-flash' model as per guidelines.
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -208,6 +214,7 @@ export const generateMbtiProfile = async (personaState: PersonaState): Promise<M
 ${JSON.stringify(personaData, null, 2)}
 `;
     try {
+        // FIX: Use 'gemini-2.5-flash' model as per guidelines.
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -242,6 +249,7 @@ ${JSON.stringify({ name: personaState.name, role: personaState.role, tone: perso
 上記の要素を盛り込み、自然な一つの挨拶文として返答してください。挨拶文は簡潔に、全体で80文字以内にまとめてください。返答は挨拶の文章のみで、他のテキストは含めないでください。`;
     
     try {
+        // FIX: Use 'gemini-2.5-flash' model as per guidelines.
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -278,6 +286,7 @@ ${JSON.stringify(currentParams, null, 2)}
   }));
 
   try {
+    // FIX: Use 'gemini-2.5-flash' model as per guidelines.
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: conversationHistory,
@@ -338,6 +347,7 @@ ${JSON.stringify(currentParams, null, 2)}
 export const translateNameToRomaji = async (name: string): Promise<string> => {
     const prompt = `Translate the following Japanese name into a single, lowercase, filename-safe romaji string. If the name already contains an English/alphabetical part, use that part as the base. For example, 'エル' should become 'eru', and 'ADA（エイダ）' should become 'ada'.\n\nName: "${name}"\n\nRomaji:`;
     try {
+        // FIX: Use 'gemini-2.5-flash' model as per guidelines.
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -369,6 +379,7 @@ Your responses must be in character at all times.`;
     const conversationHistory = history.slice(0, -1);
 
     try {
+        // FIX: Use 'gemini-2.5-flash' model as per guidelines.
         const chat = ai.chats.create({
             model: 'gemini-2.5-flash',
             config: { systemInstruction },
