@@ -2,12 +2,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { PersonaState, ChatMessage, WebSource, PersonaCreationChatMessage, PersonaCreationChatResponse, MbtiProfile } from '../types';
 
-// Per coding guidelines, API key MUST be from process.env.API_KEY
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable is not set.");
-}
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // --- Schemas (Copied from original geminiService) ---
 
 const personaSchema = {
@@ -46,11 +40,28 @@ const mbtiProfileSchema = {
 
 // --- Main Handler ---
 
+// A single instance of the AI client to be initialized on the first request
+let ai: GoogleGenAI;
+
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
         res.setHeader('Allow', ['POST']);
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
+
+    // Gracefully handle missing API_KEY inside the handler to prevent a cold-start crash.
+    // This provides a clearer error message to the client.
+    if (!process.env.API_KEY) {
+        const errorMessage = "Server configuration error: API_KEY environment variable is not set.";
+        console.error(errorMessage);
+        return res.status(500).json({ message: errorMessage });
+    }
+    
+    // Initialize the AI client on the first valid request
+    if (!ai) {
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    }
+
 
     const { action, payload } = req.body;
 
