@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Persona } from '../types';
-import { EditIcon, TrashIcon, ChatBubbleIcon, PlusIcon } from './icons';
+import { EditIcon, TrashIcon, ChatBubbleIcon, PlusIcon, DownloadIcon } from './icons';
 
 interface PersonaListProps {
   personas: Persona[];
@@ -9,9 +9,10 @@ interface PersonaListProps {
   onDelete: (id: string) => void;
   onChat: (id: string) => void;
   onCreate: () => void;
+  onExport: (persona: Persona) => void;
 }
 
-export const PersonaList: React.FC<PersonaListProps> = ({ personas, onEdit, onDelete, onChat, onCreate }) => {
+export const PersonaList: React.FC<PersonaListProps> = ({ personas, onEdit, onDelete, onChat, onCreate, onExport }) => {
   if (personas.length === 0) {
     return (
       <div className="text-center py-16 px-8 bg-gray-800 rounded-lg flex flex-col items-center">
@@ -57,8 +58,9 @@ export const PersonaList: React.FC<PersonaListProps> = ({ personas, onEdit, onDe
           </div>
           <div className="flex justify-end gap-2 mt-6">
             <button onClick={() => onChat(persona.id)} title="Chat with this Persona" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"><ChatBubbleIcon /></button>
-            <button onClick={() => onEdit(persona)} className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"><EditIcon /></button>
-            <button onClick={() => persona.id && onDelete(persona.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-gray-700 rounded-full transition-colors"><TrashIcon /></button>
+            <button onClick={() => onEdit(persona)} title="Edit this Persona" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"><EditIcon /></button>
+            <button onClick={() => onExport(persona)} title="Export this Persona" className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"><DownloadIcon /></button>
+            <button onClick={() => persona.id && onDelete(persona.id)} title="Delete this Persona" className="p-2 text-gray-400 hover:text-red-500 hover:bg-gray-700 rounded-full transition-colors"><TrashIcon /></button>
           </div>
         </div>
       ))}

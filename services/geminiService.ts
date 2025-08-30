@@ -284,6 +284,21 @@ ${JSON.stringify(currentParams, null, 2)}
   }
 };
 
+export const translateNameToRomaji = async (name: string): Promise<string> => {
+    const prompt = `Translate the following Japanese name into a single, lowercase, filename-safe romaji string. For example, 'エル' should become 'eru'.\n\nName: "${name}"\n\nRomaji:`;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+        // Sanitize the response to ensure it's filename-safe
+        return response.text.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+    } catch (error) {
+        console.error("Error translating name to Romaji:", error);
+        // Fallback to a generic name on error
+        return "persona";
+    }
+};
 
 export const getPersonaChatResponse = async (personaState: PersonaState, history: ChatMessage[]): Promise<string> => {
     const systemInstruction = `You are a character with the following traits. Respond as this character in Japanese.

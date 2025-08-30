@@ -48,25 +48,60 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({ isOpen, 
     };
     
     const handleFileUploadForExtraction = useCallback(async (file: File) => {
-        if (!file || file.type !== "text/plain") {
-            setError("Please upload a valid .txt file.");
+        if (!file) return;
+
+        const isJson = file.type === "application/json" || file.name.endsWith('.json');
+        const isText = file.type === "text/plain" || file.name.endsWith('.txt');
+
+        if (!isJson && !isText) {
+            setError("Please upload a valid .txt or .json file.");
             return;
         }
+
         const text = await file.text();
         if (!text) {
             setError("File is empty.");
             return;
         }
-        
+
         setError(null);
         setIsLoading(true);
-        setLoadingMessage("AI is analyzing the document...");
+
         try {
-            const extractedParams = await geminiService.extractParamsFromDoc(text);
-            const summary = await geminiService.generateSummaryFromParams(extractedParams);
-            onSave({ ...extractedParams, summary });
+            if (isJson) {
+                setLoadingMessage("Parsing JSON file...");
+                const importedData = JSON.parse(text);
+
+                if (typeof importedData.name === 'undefined') {
+                    throw new Error("Invalid persona JSON. It must be a single persona object with at least a 'name' property.");
+                }
+                
+                const personaState: PersonaState = {
+                    name: importedData.name || '',
+                    role: importedData.role || '',
+                    tone: importedData.tone || '',
+                    personality: importedData.personality || '',
+                    worldview: importedData.worldview || '',
+                    experience: importedData.experience || '',
+                    other: importedData.other || '',
+                    summary: importedData.summary || '',
+                    sources: importedData.sources || [],
+                    mbtiProfile: importedData.mbtiProfile,
+                };
+                onSave(personaState);
+
+            } else { // isText
+                setLoadingMessage("AI is analyzing the document...");
+                const extractedParams = await geminiService.extractParamsFromDoc(text);
+                const summary = await geminiService.generateSummaryFromParams(extractedParams);
+                onSave({ ...extractedParams, summary });
+            }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to create persona from file.");
+            if (err instanceof SyntaxError) {
+                setError("Invalid JSON format in the provided file.");
+            } else {
+                setError(err instanceof Error ? err.message : "Failed to create persona from file.");
+            }
         } finally {
             setIsLoading(false);
         }
@@ -114,10 +149,10 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({ isOpen, 
                     </div>
 
                     <div onClick={handleUploadClick} onDrop={handleFileDrop} onDragOver={handleDragOver} className="flex flex-col items-center justify-center border-2 border-dashed border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-500 hover:bg-gray-800/50 transition-all">
-                        <input type="file" ref={fileInputRef} className="hidden" accept=".txt" onChange={(e) => e.target.files && handleFileUploadForExtraction(e.target.files[0])} />
+                        <input type="file" ref={fileInputRef} className="hidden" accept=".txt,.json" onChange={(e) => e.target.files && handleFileUploadForExtraction(e.target.files[0])} />
                         <UploadIcon />
                         <p className="mt-2 font-semibold text-gray-400">Create From File</p>
-                        <p className="text-xs text-gray-500">Drag & drop or click to upload a .txt file.</p>
+                        <p className="text-xs text-gray-500">Drag & drop or click to upload a .txt or .json file.</p>
                     </div>
                 </main>
 

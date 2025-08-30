@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 // From Heroicons v1 (solid)
@@ -70,10 +71,16 @@ export const UndoIcon: React.FC = () => (
   </svg>
 );
 
-export const UploadIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+export const UploadIcon: React.FC<{ className?: string }> = ({ className = "h-8 w-8 text-gray-500" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
         <path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 13H11V9.414l-1.293 1.293a1 1 0 01-1.414-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L13 9.414V13h-1.5a1 1 0 010-2H13a3 3 0 10-2.646-4.992 2.5 2.5 0 00-4.707 1.052A3.5 3.5 0 005.5 13z" />
     </svg>
+);
+
+export const DownloadIcon: React.FC<{ className?: string }> = ({ className = "h-5 w-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
+    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+  </svg>
 );
 
 export const SearchIcon: React.FC = () => (

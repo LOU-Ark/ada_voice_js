@@ -7,9 +7,11 @@ import { ProductionChat } from './components/ProductionChat';
 import { PlusIcon, EditIcon, ChatBubbleIcon } from './components/icons';
 import * as geminiService from './services/geminiService';
 import { VoiceManagerModal } from './components/VoiceManagerModal';
+import { Loader } from './components/Loader';
 
 const App: React.FC = () => {
-  const [personas, setPersonas] = useState<Persona[]>([
+  // Define the initial default personas to be used if nothing is in localStorage
+  const initialDefaultPersonas: Persona[] = [
     {
       id: '1',
       name: 'エル',
@@ -22,7 +24,28 @@ const App: React.FC = () => {
       summary: 'ご主人様にお仕えするために作られた、お嬢様言葉を話すロボットプログラム、エルと申しますわ。常にエレガントな立ち振る舞いを心がけておりますが、時折、機械的な思考が顔を出すこともあるかもしれませんの。紅茶を淹れるのが得意でしてよ。どうぞ、お気軽にお申し付けくださいまし。',
       history: []
     }
-  ]);
+  ];
+
+  // Load personas from localStorage on initial render, or use the default.
+  const [personas, setPersonas] = useState<Persona[]>(() => {
+    try {
+      const storedPersonas = localStorage.getItem('interactivePersonas');
+      return storedPersonas ? JSON.parse(storedPersonas) : initialDefaultPersonas;
+    } catch (error) {
+      console.error("Failed to load personas from localStorage:", error);
+      return initialDefaultPersonas;
+    }
+  });
+
+  // Save personas to localStorage whenever they change.
+  useEffect(() => {
+    try {
+      localStorage.setItem('interactivePersonas', JSON.stringify(personas));
+    } catch (error) {
+      console.error("Failed to save personas to localStorage:", error);
+    }
+  }, [personas]);
+
   const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
@@ -31,6 +54,8 @@ const App: React.FC = () => {
   
   const [voices, setVoices] = useState<Voice[]>([]);
   const [isVoiceManagerOpen, setIsVoiceManagerOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
 
   // Load voices from localStorage on initial render
   useEffect(() => {
@@ -128,9 +153,38 @@ const App: React.FC = () => {
     setInitialChatPersonaId(personaId);
     setActiveView('chat');
   }, []);
+  
+  const handleExportSinglePersona = useCallback(async (persona: Persona) => {
+    if (!persona) return;
+    setIsLoading(true);
+    setLoadingMessage('Generating filename...');
+    try {
+      const romajiName = await geminiService.translateNameToRomaji(persona.name);
+      const filename = `persona_${romajiName}.json`;
+
+      const dataStr = JSON.stringify(persona, null, 2);
+      const dataBlob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Failed to export single persona:", error);
+      alert("An error occurred while exporting the persona.");
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage('');
+    }
+  }, []);
+
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
+      {isLoading && <Loader message={loadingMessage} />}
       <div className={`container mx-auto px-4 py-8 ${activeView === 'chat' ? 'flex flex-col h-screen max-h-screen' : ''}`}>
         <header className="flex-shrink-0">
           <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
@@ -141,7 +195,7 @@ const App: React.FC = () => {
               <p className="text-gray-400 mt-1">AI-powered character creation studio.</p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-4 self-center md:self-auto">
-              <div className="flex gap-1 bg-gray-800 p-1 rounded-lg">
+              <div className="flex items-center gap-1 bg-gray-800 p-1 rounded-lg">
                   <button onClick={() => setActiveView('editor')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeView === 'editor' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}><EditIcon /> Editor</button>
                   <button onClick={() => setActiveView('chat')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeView === 'chat' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}><ChatBubbleIcon /> Chat</button>
               </div>
@@ -157,6 +211,7 @@ const App: React.FC = () => {
               onDelete={handleDeletePersona} 
               onChat={handleStartChat}
               onCreate={handleOpenCreateModal}
+              onExport={handleExportSinglePersona}
             />
           ) : (
             <ProductionChat 
