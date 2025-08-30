@@ -9,10 +9,12 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // Vercel exposes environment variables prefixed with VITE_ to serverless functions.
+    // Vercel exposes environment variables to serverless functions.
+    // The `VITE_` prefix is for client-side build-time injection, which we are not using.
+    // We remove the prefix so the serverless function can read the variables at runtime.
     const config = {
-      defaultVoiceId: process.env.VITE_FISH_AUDIO_DEFAULT_VOICE_ID,
-      defaultVoiceName: process.env.VITE_FISH_AUDIO_DEFAULT_NAME,
+      defaultVoiceId: process.env.FISH_AUDIO_DEFAULT_VOICE_ID,
+      defaultVoiceName: process.env.FISH_AUDIO_DEFAULT_NAME,
     };
     res.status(200).json(config);
   } catch (error) {
