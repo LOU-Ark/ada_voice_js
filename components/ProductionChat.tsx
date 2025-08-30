@@ -8,6 +8,7 @@ interface ProductionChatProps {
   onAddPersona: () => void;
   initialPersonaId?: string;
   voices: Voice[];
+  onOpenVoiceManager: () => void;
 }
 
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -18,7 +19,7 @@ if (recognition) {
     recognition.interimResults = false;
 }
 
-export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddPersona, initialPersonaId, voices }) => {
+export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddPersona, initialPersonaId, voices, onOpenVoiceManager }) => {
     const [selectedPersonaId, setSelectedPersonaId] = useState(initialPersonaId || personas[0]?.id || 'none');
     const [selectedVoiceId, setSelectedVoiceId] = useState(voices[0]?.id || 'none');
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -215,10 +216,15 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
                         <option value="" disabled>──────────</option>
                         <option value="add_new_persona" className="font-semibold text-indigo-400">+ New Persona</option>
                     </select>
-                    <select id="voice-select" value={selectedVoiceId} onChange={handleVoiceChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        <option value="none">No Voice</option>
-                        {voices.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
-                    </select>
+                    <div className="flex items-center gap-1">
+                        <select id="voice-select" value={selectedVoiceId} onChange={handleVoiceChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-grow">
+                            <option value="none">No Voice</option>
+                            {voices.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
+                        </select>
+                         <button onClick={onOpenVoiceManager} className="p-2 flex-shrink-0 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors" aria-label="Manage voices">
+                            <CogIcon />
+                        </button>
+                    </div>
                 </div>
             </header>
 

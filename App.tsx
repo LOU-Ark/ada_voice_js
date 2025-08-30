@@ -71,6 +71,27 @@ const App: React.FC = () => {
   const [defaultVoice, setDefaultVoice] = useState<Voice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
+  const [isVoiceManagerOpen, setIsVoiceManagerOpen] = useState(false);
+
+  // Load custom voices from localStorage
+  const [customVoices, setCustomVoices] = useState<Voice[]>(() => {
+    try {
+      const storedVoices = localStorage.getItem('customVoices');
+      return storedVoices ? JSON.parse(storedVoices) : [];
+    } catch (error) {
+      console.error("Failed to load custom voices from localStorage:", error);
+      return [];
+    }
+  });
+
+  // Save custom voices to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('customVoices', JSON.stringify(customVoices));
+    } catch (error) {
+      console.error("Failed to save custom voices to localStorage:", error);
+    }
+  }, [customVoices]);
 
   // Load default voice config from server on initial render
   useEffect(() => {
@@ -95,10 +116,14 @@ const App: React.FC = () => {
     fetchConfig();
   }, []);
   
-  // The list of all available voices is now just the default voice, if it exists.
+  // The list of all available voices is now the default voice, plus any custom ones.
   const allVoices = useMemo(() => {
-    return defaultVoice ? [defaultVoice] : [];
-  }, [defaultVoice]);
+    const voices: Voice[] = [];
+    if (defaultVoice) {
+      voices.push(defaultVoice);
+    }
+    return [...voices, ...customVoices];
+  }, [defaultVoice, customVoices]);
 
 
   const handleOpenEditorModal = useCallback((persona: Persona) => {
@@ -114,6 +139,12 @@ const App: React.FC = () => {
     setIsEditorModalOpen(false);
     setIsCreateModalOpen(false);
     setEditingPersona(null);
+  }, []);
+
+  const handleOpenVoiceManager = useCallback(() => setIsVoiceManagerOpen(true), []);
+  const handleCloseVoiceManager = useCallback(() => setIsVoiceManagerOpen(false), []);
+  const handleSaveVoices = useCallback((voices: Voice[]) => {
+    setCustomVoices(voices);
   }, []);
 
   const handleSavePersona = useCallback(async (personaToSave: PersonaState & { id?: string }) => {
@@ -255,6 +286,7 @@ const App: React.FC = () => {
               onAddPersona={handleOpenCreateModal}
               initialPersonaId={initialChatPersonaId}
               voices={allVoices}
+              onOpenVoiceManager={handleOpenVoiceManager}
             />
           )}
         </main>
@@ -273,6 +305,15 @@ const App: React.FC = () => {
             isOpen={isCreateModalOpen}
             onClose={handleCloseModals}
             onSave={handleSavePersona}
+        />
+      )}
+       {isVoiceManagerOpen && (
+        <VoiceManagerModal
+            isOpen={isVoiceManagerOpen}
+            onClose={handleCloseVoiceManager}
+            initialVoices={customVoices}
+            onSave={handleSaveVoices}
+            defaultVoice={defaultVoice}
         />
       )}
     </div>
