@@ -58,15 +58,24 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
             audioRef.current = null;
         }
     },[]);
-
+    
     useEffect(() => {
-        // Set initial voice or reset if current is invalid
-        const currentSelectionExists = voices.some(v => v.id === selectedVoiceId);
-        if (!currentSelectionExists) {
-            const defaultVercelVoice = voices.find(v => v.id === 'default_voice');
-            setSelectedVoiceId(defaultVercelVoice ? defaultVercelVoice.id : 'none');
+        const defaultVercelVoice = voices.find(v => v.id === 'default_voice');
+
+        // If a default voice is available and the current selection is 'none', update to the default.
+        // This ensures the default is selected on initial load.
+        if (defaultVercelVoice && selectedVoiceId === 'none') {
+            setSelectedVoiceId(defaultVercelVoice.id);
+            return; // Exit after setting the default
         }
-    }, [voices]);
+        
+        // If the currently selected voice is no longer in the list (e.g. was deleted),
+        // reset to the default voice if available, otherwise to 'none'.
+        const currentSelectionExists = voices.some(v => v.id === selectedVoiceId);
+        if (!currentSelectionExists && selectedVoiceId !== 'none') {
+             setSelectedVoiceId(defaultVercelVoice ? defaultVercelVoice.id : 'none');
+        }
+    }, [voices, selectedVoiceId]);
     
     // Reset chat history when persona changes
     useEffect(() => {
