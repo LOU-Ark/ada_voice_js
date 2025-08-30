@@ -431,31 +431,27 @@ const AiToolsPanel: React.FC<{
     const [topic, setTopic] = useState('');
     
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="space-y-6">
-                 <SummaryPanel parameters={parameters} onEditField={onEditField} />
-                 <MbtiPanel mbtiProfile={parameters.mbtiProfile} isLoading={isLoading} onAnalyze={onAnalyzeMbti} />
-            </div>
-            <div className="space-y-6">
-                <div className="bg-gray-900/50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-gray-300 mb-2">Re-generate from Topic</h3>
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={topic}
-                            onChange={(e) => setTopic(e.target.value)}
-                            placeholder="e.g., 'A stoic samurai'"
-                            className="w-full bg-gray-700/80 rounded-md p-2 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            disabled={isLoading}
-                        />
-                        <button onClick={() => onRegenerate(topic)} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-md shadow-lg disabled:bg-gray-600">
-                            <SearchIcon /> Generate
-                        </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">Overwrites current parameters based on a new topic.</p>
+        <div className="space-y-6">
+             <SummaryPanel parameters={parameters} onEditField={onEditField} />
+             <MbtiPanel mbtiProfile={parameters.mbtiProfile} isLoading={isLoading} onAnalyze={onAnalyzeMbti} />
+            <div className="bg-gray-900/50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-gray-300 mb-2">Re-generate from Topic</h3>
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={topic}
+                        onChange={(e) => setTopic(e.target.value)}
+                        placeholder="e.g., 'A stoic samurai'"
+                        className="w-full bg-gray-700/80 rounded-md p-2 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        disabled={isLoading}
+                    />
+                    <button onClick={() => onRegenerate(topic)} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-md shadow-lg disabled:bg-gray-600">
+                        <SearchIcon /> Generate
+                    </button>
                 </div>
-                <HistoryPanel initialPersona={initialPersona} handleRevert={onRevert} />
+                <p className="text-xs text-gray-500 mt-2">Overwrites current parameters based on a new topic.</p>
             </div>
+            <HistoryPanel initialPersona={initialPersona} handleRevert={onRevert} />
         </div>
     );
 };
@@ -674,7 +670,8 @@ export const PersonaEditorScreen: React.FC<PersonaEditorProps> = ({ onBack, onSa
                 <BackIcon />
             </button>
             <h2 className="text-2xl font-bold text-indigo-400 flex-shrink-0">{parameters.name}</h2>
-            <div className="flex gap-2 p-1 bg-gray-800 rounded-lg ml-4">
+            {/* Tabs for mobile view, hidden on large screens */}
+            <div className="flex gap-2 p-1 bg-gray-800 rounded-lg ml-4 lg:hidden">
                 <TabButton isActive={activeTab === 'editor'} onClick={() => setActiveTab('editor')}>Editor</TabButton>
                 <TabButton isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')}>AI Tools</TabButton>
                 <TabButton isActive={activeTab === 'chat'} onClick={() => setActiveTab('chat')}>Test Chat</TabButton>
@@ -684,33 +681,64 @@ export const PersonaEditorScreen: React.FC<PersonaEditorProps> = ({ onBack, onSa
         <main className="flex-grow min-h-0">
           {error && <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-2 rounded-md mb-4 text-sm">{error}</div>}
           
-           {activeTab === 'editor' && (
-                <div className="grid grid-cols-1 gap-6">
-                    <ParametersPanel 
-                        parameters={parameters} 
-                        onEditField={handleEditField}
-                        voices={voices}
-                        onParameterChange={handleParameterChange}
-                        onAddVoice={onAddVoice}
-                    />
-                </div>
-           )}
+           {/* Mobile Tab View */}
+           <div className="lg:hidden">
+              {activeTab === 'editor' && (
+                  <ParametersPanel 
+                      parameters={parameters} 
+                      onEditField={handleEditField}
+                      voices={voices}
+                      onParameterChange={handleParameterChange}
+                      onAddVoice={onAddVoice}
+                  />
+              )}
+              {activeTab === 'ai' && (
+                  <AiToolsPanel
+                      parameters={parameters}
+                      initialPersona={initialPersona}
+                      isLoading={isLoading}
+                      onEditField={handleEditField}
+                      onAnalyzeMbti={handleAnalyzeMbti}
+                      onRegenerate={handleRegenerateFromTopic}
+                      onRevert={handleRevert}
+                  />
+              )}
+              {activeTab === 'chat' && (
+                  <TestChatPanel persona={parameters} />
+              )}
+           </div>
 
-            {activeTab === 'ai' && (
-                 <AiToolsPanel
-                    parameters={parameters}
-                    initialPersona={initialPersona}
-                    isLoading={isLoading}
-                    onEditField={handleEditField}
-                    onAnalyzeMbti={handleAnalyzeMbti}
-                    onRegenerate={handleRegenerateFromTopic}
-                    onRevert={handleRevert}
-                />
-            )}
+           {/* Desktop 3-Column View */}
+           <div className="hidden lg:grid lg:grid-cols-3 lg:gap-6">
+              {/* Column 1: Editor */}
+              <div>
+                 <ParametersPanel 
+                      parameters={parameters} 
+                      onEditField={handleEditField}
+                      voices={voices}
+                      onParameterChange={handleParameterChange}
+                      onAddVoice={onAddVoice}
+                  />
+              </div>
 
-            {activeTab === 'chat' && (
-                <TestChatPanel persona={parameters} />
-            )}
+              {/* Column 2: AI Tools */}
+              <div>
+                  <AiToolsPanel
+                      parameters={parameters}
+                      initialPersona={initialPersona}
+                      isLoading={isLoading}
+                      onEditField={handleEditField}
+                      onAnalyzeMbti={handleAnalyzeMbti}
+                      onRegenerate={handleRegenerateFromTopic}
+                      onRevert={handleRevert}
+                  />
+              </div>
+
+              {/* Column 3: Test Chat */}
+              <div>
+                  <TestChatPanel persona={parameters} />
+              </div>
+           </div>
         </main>
         
         <footer className="flex-shrink-0 flex justify-end p-4 mt-6 border-t border-gray-700">
