@@ -32,12 +32,27 @@ const App: React.FC = () => {
   const [personas, setPersonas] = useState<Persona[]>(() => {
     try {
       const storedPersonas = localStorage.getItem('interactivePersonas');
-      return storedPersonas ? JSON.parse(storedPersonas) : initialDefaultPersonas;
+      const loadedPersonas = storedPersonas ? JSON.parse(storedPersonas) : initialDefaultPersonas;
+      
+      // Smart merging of default and stored personas
+      const defaultPersona = initialDefaultPersonas[0];
+      const hasStoredDefault = loadedPersonas.some((p: Persona) => p.id === defaultPersona.id);
+
+      if (!hasStoredDefault) {
+        return [defaultPersona, ...loadedPersonas];
+      }
+      // If the default persona has been modified and stored, respect the stored version.
+      // But ensure no duplicates exist from older logic.
+      const uniquePersonas = loadedPersonas.filter((p: Persona, index: number, self: Persona[]) =>
+        index === self.findIndex((t) => t.id === p.id)
+      );
+      return uniquePersonas;
     } catch (error) {
       console.error("Failed to load personas from localStorage:", error);
       return initialDefaultPersonas;
     }
   });
+
 
   // Save personas to localStorage whenever they change.
   useEffect(() => {
@@ -52,7 +67,7 @@ const App: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
   const [activeView, setActiveView] = useState<'editor' | 'chat'>('editor');
-  const [initialChatPersonaId, setInitialChatPersonaId] = useState<string | undefined>();
+  const [initialChatPersonaId, setInitialChatPersonaId] = useState<string | undefined>(personas[0]?.id);
   
   const [voices, setVoices] = useState<Voice[]>([]);
   const [defaultVoice, setDefaultVoice] = useState<Voice | null>(null);

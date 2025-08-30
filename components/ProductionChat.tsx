@@ -12,17 +12,6 @@ interface ProductionChatProps {
   onManageVoices: () => void;
 }
 
-const defaultPersonaState: PersonaState = {
-  name: 'AI Assistant',
-  role: 'A helpful and friendly AI assistant.',
-  tone: 'Clear, helpful, and polite.',
-  personality: 'Knowledgeable and patient.',
-  worldview: 'The digital realm.',
-  experience: 'Trained on a vast amount of text data.',
-  other: '',
-  summary: 'A general-purpose AI assistant.',
-};
-
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 const recognition = SpeechRecognition ? new SpeechRecognition() : null;
 if (recognition) {
@@ -32,8 +21,8 @@ if (recognition) {
 }
 
 export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddPersona, initialPersonaId, voices, onManageVoices }) => {
-    const [selectedPersonaId, setSelectedPersonaId] = useState<string>(initialPersonaId || 'default');
-    const [selectedVoiceId, setSelectedVoiceId] = useState<string>('none');
+    const [selectedPersonaId, setSelectedPersonaId] = useState(initialPersonaId || personas[0]?.id || 'none');
+    const [selectedVoiceId, setSelectedVoiceId] = useState(voices[0]?.id || 'none');
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [userInput, setUserInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -59,28 +48,24 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
         }
     },[]);
     
+    // Update selected voice when the voice list changes
     useEffect(() => {
+        const currentSelectionExists = voices.some(v => v.id === selectedVoiceId);
         const defaultVercelVoice = voices.find(v => v.id === 'default_voice');
 
-        // If a default voice is available and the current selection is 'none', update to the default.
-        // This ensures the default is selected on initial load.
-        if (defaultVercelVoice && selectedVoiceId === 'none') {
-            setSelectedVoiceId(defaultVercelVoice.id);
-            return; // Exit after setting the default
-        }
-        
-        // If the currently selected voice is no longer in the list (e.g. was deleted),
-        // reset to the default voice if available, otherwise to 'none'.
-        const currentSelectionExists = voices.some(v => v.id === selectedVoiceId);
-        if (!currentSelectionExists && selectedVoiceId !== 'none') {
-             setSelectedVoiceId(defaultVercelVoice ? defaultVercelVoice.id : 'none');
+        // If the current selection is invalid (e.g., deleted) or was 'none',
+        // try to select the default voice, or the first voice in the list, or fallback to 'none'.
+        if (!currentSelectionExists) {
+            setSelectedVoiceId(defaultVercelVoice?.id || voices[0]?.id || 'none');
         }
     }, [voices, selectedVoiceId]);
     
     // Reset chat history when persona changes
     useEffect(() => {
-        const activePersona = personas.find(p => p.id === selectedPersonaId) || defaultPersonaState;
-        setChatHistory([{ role: 'model', parts: [{ text: `こんにちは、${activePersona.name}です。何かお話ししましょう。` }] }]);
+        const activePersona = personas.find(p => p.id === selectedPersonaId);
+        if (activePersona) {
+             setChatHistory([{ role: 'model', parts: [{ text: `こんにちは、${activePersona.name}です。何かお話ししましょう。` }] }]);
+        }
         stopPlayback();
     }, [selectedPersonaId, personas, stopPlayback]);
 
@@ -154,7 +139,12 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
         setUserInput('');
         setIsLoading(true);
 
-        const activePersona = personas.find(p => p.id === selectedPersonaId) || defaultPersonaState;
+        const activePersona = personas.find(p => p.id === selectedPersonaId);
+        if (!activePersona) {
+            setIsLoading(false);
+            setChatHistory(prev => [...prev, {role: 'model', parts: [{text: "Error: No persona selected."}]}]);
+            return;
+        }
 
         try {
             const responseText = await geminiService.getPersonaChatResponse(activePersona, newHistory);
@@ -173,9 +163,6 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
         const value = e.target.value;
         if (value === 'add_new_persona') {
             onAddPersona();
-            // The select is a controlled component, so its value will not change
-            // unless we update the state. By not updating state here, it remains
-            // on the previously selected persona visually.
         } else {
             setSelectedPersonaId(value);
         }
@@ -185,7 +172,6 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
         const value = e.target.value;
         if (value === 'manage_voices') {
             onManageVoices();
-             // The select is a controlled component, so its value will not change.
         } else {
             setSelectedVoiceId(value);
             stopPlayback();
@@ -226,13 +212,14 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
         };
     }, []);
 
+    const activePersona = personas.find(p => p.id === selectedPersonaId) || { name: 'None' };
+
     return (
         <div className="bg-gray-800 rounded-lg shadow-2xl w-full h-full flex flex-col">
             <header className="flex-shrink-0 flex flex-col md:flex-row justify-between md:items-center p-4 border-b border-gray-700 gap-4">
                 <h2 className="text-xl font-bold text-white self-start md:self-center">AI Chat</h2>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
                      <select id="persona-select" value={selectedPersonaId} onChange={handlePersonaChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        <option value="default">Default Assistant</option>
                         {personas.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
                         <option value="" disabled>──────────</option>
                         <option value="add_new_persona" className="font-semibold text-indigo-400">+ New Persona</option>
@@ -251,7 +238,7 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
                     <div key={index} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         {msg.role === 'model' && (
                             <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                                { (personas.find(p => p.id === selectedPersonaId) || defaultPersonaState).name.charAt(0) }
+                                { activePersona.name.charAt(0) }
                             </div>
                         )}
                         <div className={`max-w-md lg:max-w-xl px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
@@ -262,7 +249,7 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
                  {isLoading && (
                     <div className="flex items-end gap-2 justify-start">
                         <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                            { (personas.find(p => p.id === selectedPersonaId) || defaultPersonaState).name.charAt(0) }
+                            { activePersona.name.charAt(0) }
                         </div>
                         <div className="px-4 py-2 rounded-lg bg-gray-700 text-gray-200">
                             <div className="flex items-center gap-1.5">

@@ -1,4 +1,3 @@
-
 // This serverless function provides public configuration variables
 // from server-side environment variables to the client-side application.
 // This avoids the need for a build step to inject env vars into the client bundle.
