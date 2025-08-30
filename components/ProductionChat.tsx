@@ -58,6 +58,15 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
             audioRef.current = null;
         }
     },[]);
+
+    useEffect(() => {
+        // Set initial voice or reset if current is invalid
+        const currentSelectionExists = voices.some(v => v.id === selectedVoiceId);
+        if (!currentSelectionExists) {
+            const defaultVercelVoice = voices.find(v => v.id === 'default_voice');
+            setSelectedVoiceId(defaultVercelVoice ? defaultVercelVoice.id : 'none');
+        }
+    }, [voices]);
     
     // Reset chat history when persona changes
     useEffect(() => {
@@ -88,6 +97,7 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
                 },
                 body: JSON.stringify({
                     text: text,
+                    voiceConfigId: voice.id,
                     token: voice.token,
                     voiceId: voice.voiceId,
                 }),

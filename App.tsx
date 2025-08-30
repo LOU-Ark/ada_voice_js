@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
+
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Persona, PersonaState, PersonaHistoryEntry, Voice } from './types';
 import { PersonaEditorModal, CreatePersonaModal } from './components/PersonaEditorModal';
 import { PersonaList } from './components/PersonaList';
@@ -54,11 +55,12 @@ const App: React.FC = () => {
   const [initialChatPersonaId, setInitialChatPersonaId] = useState<string | undefined>();
   
   const [voices, setVoices] = useState<Voice[]>([]);
+  const [defaultVoice, setDefaultVoice] = useState<Voice | null>(null);
   const [isVoiceManagerOpen, setIsVoiceManagerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
 
-  // Load voices from localStorage on initial render
+  // Load voices from localStorage and config from server on initial render
   useEffect(() => {
     try {
       const storedVoices = localStorage.getItem('fishAudioVoices');
@@ -68,7 +70,32 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Failed to load voices from localStorage:", error);
     }
+    
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('/api/config');
+        if (response.ok) {
+          const config = await response.json();
+          if (config.defaultVoiceId) {
+            setDefaultVoice({
+              id: 'default_voice',
+              name: config.defaultVoiceName || 'Default Voice (Vercel)',
+              token: '', // Token is handled server-side
+              voiceId: config.defaultVoiceId,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch server config:", error);
+      }
+    };
+    fetchConfig();
   }, []);
+  
+  const allVoices = useMemo(() => {
+    return [...(defaultVoice ? [defaultVoice] : []), ...voices];
+  }, [voices, defaultVoice]);
+
 
   // Save voices to localStorage whenever they change
   const handleSaveVoices = useCallback((updatedVoices: Voice[]) => {
@@ -234,7 +261,7 @@ const App: React.FC = () => {
               personas={personas}
               onAddPersona={handleOpenCreateModal}
               initialPersonaId={initialChatPersonaId}
-              voices={voices}
+              voices={allVoices}
               onManageVoices={() => setIsVoiceManagerOpen(true)}
             />
           )}

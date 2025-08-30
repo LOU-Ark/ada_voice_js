@@ -19,7 +19,18 @@ export default async function handler(req: any, res: any) {
 
     try {
         // In a Vercel Node.js environment, the body is pre-parsed on `req.body`.
-        const { text, token, voiceId } = req.body;
+        const { text, token: requestToken, voiceId: requestVoiceId, voiceConfigId } = req.body;
+
+        let token: string;
+        let voiceId: string;
+
+        if (voiceConfigId === 'default_voice') {
+            token = process.env.FISH_AUDIO_DEFAULT_TOKEN || '';
+            voiceId = requestVoiceId; // This is the default voice ID from env, passed by client
+        } else {
+            token = requestToken;
+            voiceId = requestVoiceId;
+        }
 
         if (!text || !token || !voiceId) {
             return res.status(400).json({ error: 'Missing required parameters: text, token, voiceId' });
