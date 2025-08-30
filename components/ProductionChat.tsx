@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Persona, PersonaState, ChatMessage, Voice } from '../types';
 import * as geminiService from '../services/geminiService';
@@ -9,7 +8,6 @@ interface ProductionChatProps {
   onAddPersona: () => void;
   initialPersonaId?: string;
   voices: Voice[];
-  onManageVoices: () => void;
 }
 
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -20,7 +18,7 @@ if (recognition) {
     recognition.interimResults = false;
 }
 
-export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddPersona, initialPersonaId, voices, onManageVoices }) => {
+export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddPersona, initialPersonaId, voices }) => {
     const [selectedPersonaId, setSelectedPersonaId] = useState(initialPersonaId || personas[0]?.id || 'none');
     const [selectedVoiceId, setSelectedVoiceId] = useState(voices[0]?.id || 'none');
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -170,12 +168,8 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
 
     const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const value = e.target.value;
-        if (value === 'manage_voices') {
-            onManageVoices();
-        } else {
-            setSelectedVoiceId(value);
-            stopPlayback();
-        }
+        setSelectedVoiceId(value);
+        stopPlayback();
     };
 
     const handleToggleListen = () => {
@@ -227,8 +221,6 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
                     <select id="voice-select" value={selectedVoiceId} onChange={handleVoiceChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <option value="none">No Voice</option>
                         {voices.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
-                        <option value="" disabled>──────────</option>
-                        <option value="manage_voices" className="font-semibold text-indigo-400">+ New Voice</option>
                     </select>
                 </div>
             </header>

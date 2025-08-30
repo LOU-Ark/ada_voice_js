@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Persona, PersonaState, PersonaHistoryEntry, Voice } from './types';
 import { PersonaEditorModal, CreatePersonaModal } from './components/PersonaEditorModal';
@@ -69,23 +68,12 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<'editor' | 'chat'>('editor');
   const [initialChatPersonaId, setInitialChatPersonaId] = useState<string | undefined>(personas[0]?.id);
   
-  const [voices, setVoices] = useState<Voice[]>([]);
   const [defaultVoice, setDefaultVoice] = useState<Voice | null>(null);
-  const [isVoiceManagerOpen, setIsVoiceManagerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
 
-  // Load voices from localStorage and config from server on initial render
+  // Load default voice config from server on initial render
   useEffect(() => {
-    try {
-      const storedVoices = localStorage.getItem('fishAudioVoices');
-      if (storedVoices) {
-        setVoices(JSON.parse(storedVoices));
-      }
-    } catch (error) {
-      console.error("Failed to load voices from localStorage:", error);
-    }
-    
     const fetchConfig = async () => {
       try {
         const response = await fetch('/api/config');
@@ -107,27 +95,10 @@ const App: React.FC = () => {
     fetchConfig();
   }, []);
   
+  // The list of all available voices is now just the default voice, if it exists.
   const allVoices = useMemo(() => {
-    // If a default voice is provided by the server, filter out any custom voices
-    // with the same name to prevent duplicates in the dropdown.
-    const filteredCustomVoices = defaultVoice
-      ? voices.filter(v => v.name !== defaultVoice.name)
-      : voices;
-      
-    // The final list prioritizes the default voice.
-    return [...(defaultVoice ? [defaultVoice] : []), ...filteredCustomVoices];
-  }, [voices, defaultVoice]);
-
-
-  // Save voices to localStorage whenever they change
-  const handleSaveVoices = useCallback((updatedVoices: Voice[]) => {
-    try {
-      setVoices(updatedVoices);
-      localStorage.setItem('fishAudioVoices', JSON.stringify(updatedVoices));
-    } catch (error) {
-      console.error("Failed to save voices to localStorage:", error);
-    }
-  }, []);
+    return defaultVoice ? [defaultVoice] : [];
+  }, [defaultVoice]);
 
 
   const handleOpenEditorModal = useCallback((persona: Persona) => {
@@ -284,7 +255,6 @@ const App: React.FC = () => {
               onAddPersona={handleOpenCreateModal}
               initialPersonaId={initialChatPersonaId}
               voices={allVoices}
-              onManageVoices={() => setIsVoiceManagerOpen(true)}
             />
           )}
         </main>
@@ -303,15 +273,6 @@ const App: React.FC = () => {
             isOpen={isCreateModalOpen}
             onClose={handleCloseModals}
             onSave={handleSavePersona}
-        />
-      )}
-      {isVoiceManagerOpen && (
-        <VoiceManagerModal
-          isOpen={isVoiceManagerOpen}
-          onClose={() => setIsVoiceManagerOpen(false)}
-          initialVoices={voices}
-          onSave={handleSaveVoices}
-          defaultVoice={defaultVoice}
         />
       )}
     </div>
