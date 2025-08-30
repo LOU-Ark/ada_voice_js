@@ -46,15 +46,12 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
         }
     },[]);
     
-    // Update selected voice when the voice list changes
+    // Update selected voice when the voice list changes to handle async loading.
     useEffect(() => {
-        const currentSelectionExists = voices.some(v => v.id === selectedVoiceId);
-        const defaultVercelVoice = voices.find(v => v.id === 'default_voice');
-
-        // If the current selection is invalid (e.g., deleted) or was 'none',
-        // try to select the default voice, or the first voice in the list, or fallback to 'none'.
-        if (!currentSelectionExists) {
-            setSelectedVoiceId(defaultVercelVoice?.id || voices[0]?.id || 'none');
+        // If the current selection is 'none' (initial state) AND the voice list is now populated...
+        if (selectedVoiceId === 'none' && voices.length > 0) {
+            // ...then select the first voice in the list. By design, the default voice is always first.
+            setSelectedVoiceId(voices[0].id);
         }
     }, [voices, selectedVoiceId]);
     
