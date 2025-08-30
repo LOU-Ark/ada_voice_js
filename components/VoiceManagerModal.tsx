@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Voice } from '../types';
 import { CloseIcon, SaveIcon, PlusIcon, TrashIcon, EditIcon } from './icons';
@@ -93,7 +92,7 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({ isOpen, on
               <div className="flex items-center justify-between bg-gray-700/60 p-3 rounded-md border border-indigo-700/50">
                 <div className="flex-grow">
                   <p className="font-semibold text-white">{defaultVoice.name}</p>
-                  <p className="text-xs text-indigo-400">Default Voice (from Vercel)</p>
+                  <p className="text-xs text-indigo-400">Default Voice (from Server)</p>
                 </div>
                 {/* No actions for default voice */}
               </div>
