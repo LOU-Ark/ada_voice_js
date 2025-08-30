@@ -50,8 +50,9 @@ export default async function handler(req: any, res: any) {
     }
 
     // Gracefully handle missing API_KEY inside the handler to prevent a cold-start crash.
-    // This provides a clearer error message to the client.
-    if (!process.env.API_KEY) {
+    // Check for API_KEY first, with a fallback to GEMINI_API_KEY for robustness.
+    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
         const errorMessage = "Server configuration error: API_KEY environment variable is not set.";
         console.error(errorMessage);
         return res.status(500).json({ message: errorMessage });
@@ -59,7 +60,7 @@ export default async function handler(req: any, res: any) {
     
     // Initialize the AI client on the first valid request
     if (!ai) {
-        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        ai = new GoogleGenAI({ apiKey });
     }
 
 
