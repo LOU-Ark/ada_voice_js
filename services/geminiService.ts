@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Persona, PersonaState, ChatMessage, WebSource, PersonaCreationChatMessage, PersonaCreationChatResponse, MbtiProfile } from '../types';
 
@@ -285,7 +284,7 @@ ${JSON.stringify(currentParams, null, 2)}
 };
 
 export const translateNameToRomaji = async (name: string): Promise<string> => {
-    const prompt = `Translate the following Japanese name into a single, lowercase, filename-safe romaji string. For example, 'エル' should become 'eru'.\n\nName: "${name}"\n\nRomaji:`;
+    const prompt = `Translate the following Japanese name into a single, lowercase, filename-safe romaji string. If the name already contains an English/alphabetical part, use that part as the base. For example, 'エル' should become 'eru', and 'ADA（エイダ）' should become 'ada'.\n\nName: "${name}"\n\nRomaji:`;
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
