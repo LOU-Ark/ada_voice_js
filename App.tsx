@@ -1,6 +1,7 @@
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Persona, PersonaState, PersonaHistoryEntry, Voice } from './types';
-import { PersonaEditorModal, CreatePersonaModal } from './components/PersonaEditorModal';
+import { PersonaEditorScreen, CreatePersonaModal } from './components/PersonaEditorModal';
 import { PersonaList } from './components/PersonaList';
 import { ProductionChat } from './components/ProductionChat';
 import { PlusIcon, EditIcon, ChatBubbleIcon, BackIcon } from './components/icons';
@@ -62,11 +63,9 @@ const App: React.FC = () => {
     }
   }, [personas]);
 
-  const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
-  const [activeView, setActiveView] = useState<'editor' | 'chat'>('editor');
-  const [initialChatPersonaId, setInitialChatPersonaId] = useState<string | undefined>(personas[0]?.id);
+  const [activeView, setActiveView] = useState<'list' | 'editor' | 'chat'>('list');
   
   const [defaultVoice, setDefaultVoice] = useState<Voice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -126,19 +125,19 @@ const App: React.FC = () => {
   }, [defaultVoice, customVoices]);
 
 
-  const handleOpenEditorModal = useCallback((persona: Persona) => {
+  const handleOpenEditor = useCallback((persona: Persona) => {
     setEditingPersona(persona);
-    setIsEditorModalOpen(true);
+    setActiveView('editor');
   }, []);
 
   const handleOpenCreateModal = useCallback(() => {
     setIsCreateModalOpen(true);
   }, []);
 
-  const handleCloseModals = useCallback(() => {
-    setIsEditorModalOpen(false);
-    setIsCreateModalOpen(false);
+  const handleBackToList = useCallback(() => {
+    setActiveView('list');
     setEditingPersona(null);
+    setIsCreateModalOpen(false);
   }, []);
 
   const handleOpenVoiceManager = useCallback(() => setIsVoiceManagerOpen(true), []);
@@ -190,7 +189,7 @@ const App: React.FC = () => {
       };
       
       setPersonas(prevPersonas => prevPersonas.map(p => p.id === updatedPersona.id ? updatedPersona : p));
-      setEditingPersona(updatedPersona); // This will re-render the modal with updated data, keeping it open
+      setEditingPersona(updatedPersona); // This will re-render the editor with updated data, keeping it open
     } else {
       // Create new persona
       const newPersona: Persona = {
@@ -200,10 +199,10 @@ const App: React.FC = () => {
       };
       setPersonas(prevPersonas => [...prevPersonas, newPersona]);
       
-      // Close create modal and open edit modal for the new persona
+      // Close create modal and open edit screen for the new persona
       setIsCreateModalOpen(false);
       setEditingPersona(newPersona);
-      setIsEditorModalOpen(true);
+      setActiveView('editor');
     }
   }, [personas]);
   
@@ -212,9 +211,12 @@ const App: React.FC = () => {
   }, []);
 
   const handleStartChat = useCallback((personaId: string) => {
-    setInitialChatPersonaId(personaId);
-    setActiveView('chat');
-  }, []);
+    const personaToChatWith = personas.find(p => p.id === personaId);
+    if(personaToChatWith) {
+        setEditingPersona(personaToChatWith); // Set context for back button and header
+        setActiveView('chat');
+    }
+  }, [personas]);
   
   const handleExportSinglePersona = useCallback(async (persona: Persona) => {
     if (!persona) return;
@@ -243,6 +245,10 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const activePersonaForHeader = useMemo(() => 
+    editingPersona, 
+    [editingPersona]
+  );
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
@@ -250,60 +256,59 @@ const App: React.FC = () => {
       <div className={`container mx-auto px-4 py-8 ${activeView === 'chat' ? 'flex flex-col h-screen max-h-screen' : ''}`}>
         <header className="flex-shrink-0">
           <div className="flex justify-between items-center mb-6">
-            {activeView === 'editor' ? (
+            {activeView === 'list' ? (
                 <div className="text-center md:text-left">
                     <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-600">
                         Interactive Persona Editor
                     </h1>
                     <p className="text-gray-400 mt-1">AI-powered character creation studio.</p>
                 </div>
-            ) : (
+            ) : activeView === 'chat' ? (
                 <div className="flex items-center gap-4">
-                    <button onClick={() => setActiveView('editor')} className="text-gray-400 hover:text-white p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Back to persona list">
+                    <button onClick={handleBackToList} className="text-gray-400 hover:text-white p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Back to persona list">
                         <BackIcon />
                     </button>
                     <h1 className="text-2xl font-bold text-white">
-                        Chat
+                        {activePersonaForHeader?.name || 'Chat'}
                     </h1>
                 </div>
-            )}
+            ) : null /* Editor view has its own header */}
         </div>
         </header>
 
         <main className={`${activeView === 'chat' ? 'flex-grow overflow-hidden' : ''}`}>
-          {activeView === 'editor' ? (
+          {activeView === 'list' && (
             <PersonaList 
               personas={personas} 
-              onEdit={handleOpenEditorModal} 
+              onEdit={handleOpenEditor} 
               onDelete={handleDeletePersona} 
               onChat={handleStartChat}
               onCreate={handleOpenCreateModal}
               onExport={handleExportSinglePersona}
             />
-          ) : (
-            <ProductionChat 
-              personas={personas}
-              onAddPersona={handleOpenCreateModal}
-              initialPersonaId={initialChatPersonaId}
+          )}
+          {activeView === 'editor' && editingPersona && (
+            <PersonaEditorScreen
+              onBack={handleBackToList}
+              onSave={handleSavePersona}
+              initialPersona={editingPersona}
               voices={allVoices}
-              onOpenVoiceManager={handleOpenVoiceManager}
+              onAddVoice={handleOpenVoiceManager}
+            />
+          )}
+          {activeView === 'chat' && editingPersona && (
+            <ProductionChat 
+              persona={editingPersona}
+              voices={allVoices}
             />
           )}
         </main>
       </div>
       
-      {isEditorModalOpen && editingPersona && (
-        <PersonaEditorModal
-          isOpen={isEditorModalOpen}
-          onClose={handleCloseModals}
-          onSave={handleSavePersona}
-          initialPersona={editingPersona}
-        />
-      )}
       {isCreateModalOpen && (
          <CreatePersonaModal
             isOpen={isCreateModalOpen}
-            onClose={handleCloseModals}
+            onClose={handleBackToList}
             onSave={handleSavePersona}
         />
       )}

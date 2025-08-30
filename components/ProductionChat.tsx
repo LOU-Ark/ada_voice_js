@@ -1,14 +1,12 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Persona, PersonaState, ChatMessage, Voice } from '../types';
+import { Persona, ChatMessage, Voice } from '../types';
 import * as geminiService from '../services/geminiService';
-import { SendIcon, PlusIcon, VolumeUpIcon, CogIcon, MicrophoneIcon } from './icons';
+import { SendIcon, VolumeUpIcon, MicrophoneIcon } from './icons';
 
 interface ProductionChatProps {
-  personas: Persona[];
-  onAddPersona: () => void;
-  initialPersonaId?: string;
+  persona: Persona;
   voices: Voice[];
-  onOpenVoiceManager: () => void;
 }
 
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -19,9 +17,8 @@ if (recognition) {
     recognition.interimResults = false;
 }
 
-export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddPersona, initialPersonaId, voices, onOpenVoiceManager }) => {
-    const [selectedPersonaId, setSelectedPersonaId] = useState(initialPersonaId || personas[0]?.id || 'none');
-    const [selectedVoiceId, setSelectedVoiceId] = useState(voices[0]?.id || 'none');
+export const ProductionChat: React.FC<ProductionChatProps> = ({ persona: activePersona, voices }) => {
+    const [selectedVoiceId, setSelectedVoiceId] = useState('none');
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [userInput, setUserInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -29,13 +26,6 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
     const [isListening, setIsListening] = useState(false);
     const chatBoxRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    
-    // Sync selected persona with prop from parent
-    useEffect(() => {
-        if (initialPersonaId && initialPersonaId !== selectedPersonaId) {
-            setSelectedPersonaId(initialPersonaId);
-        }
-    }, [initialPersonaId, selectedPersonaId]);
 
     const stopPlayback = useCallback(() => {
         if (audioRef.current) {
@@ -47,23 +37,29 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
         }
     },[]);
     
-    // Update selected voice when the voice list changes to handle async loading.
+    // Set selected voice based on persona's preference or default
     useEffect(() => {
-        // If the current selection is 'none' (initial state) AND the voice list is now populated...
-        if (selectedVoiceId === 'none' && voices.length > 0) {
-            // ...then select the first voice in the list. By design, the default voice is always first.
-            setSelectedVoiceId(voices[0].id);
+        if (activePersona) {
+            // If persona has a voice and that voice exists in the list
+            if (activePersona.voiceId && voices.some(v => v.id === activePersona.voiceId)) {
+                setSelectedVoiceId(activePersona.voiceId);
+            } else if (voices.length > 0) {
+                // Fallback to first available voice
+                setSelectedVoiceId(voices[0].id);
+            } else {
+                // No voices available
+                setSelectedVoiceId('none');
+            }
         }
-    }, [voices, selectedVoiceId]);
+    }, [activePersona, voices]);
     
     // Reset chat history when persona changes
     useEffect(() => {
-        const activePersona = personas.find(p => p.id === selectedPersonaId);
         if (activePersona) {
              setChatHistory([{ role: 'model', parts: [{ text: `こんにちは、${activePersona.name}です。何かお話ししましょう。` }] }]);
         }
         stopPlayback();
-    }, [selectedPersonaId, personas, stopPlayback]);
+    }, [activePersona, stopPlayback]);
 
     // Scroll to bottom on new message
     useEffect(() => {
@@ -135,7 +131,6 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
         setUserInput('');
         setIsLoading(true);
 
-        const activePersona = personas.find(p => p.id === selectedPersonaId);
         if (!activePersona) {
             setIsLoading(false);
             setChatHistory(prev => [...prev, {role: 'model', parts: [{text: "Error: No persona selected."}]}]);
@@ -152,25 +147,6 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
             setChatHistory(prev => [...prev, errorMessage]);
         } finally {
             setIsLoading(false);
-        }
-    };
-    
-    const handlePersonaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const value = e.target.value;
-        if (value === 'add_new_persona') {
-            onAddPersona();
-        } else {
-            setSelectedPersonaId(value);
-        }
-    };
-
-    const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const value = e.target.value;
-        if (value === 'add_new_voice') {
-            onOpenVoiceManager();
-        } else {
-            setSelectedVoiceId(value);
-            stopPlayback();
         }
     };
 
@@ -208,33 +184,14 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
         };
     }, []);
 
-    const activePersona = personas.find(p => p.id === selectedPersonaId) || { name: 'None' };
-
     return (
         <div className="bg-gray-800 rounded-lg shadow-2xl w-full h-full flex flex-col">
-            <header className="flex-shrink-0 flex flex-col md:flex-row justify-between md:items-center p-4 border-b border-gray-700 gap-4">
-                <h2 className="text-xl font-bold text-white self-start md:self-center">AI Chat</h2>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                     <select id="persona-select" value={selectedPersonaId} onChange={handlePersonaChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        {personas.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                        <option value="" disabled>──────────</option>
-                        <option value="add_new_persona" className="font-semibold text-indigo-400">+ New Persona</option>
-                    </select>
-                    <select id="voice-select" value={selectedVoiceId} onChange={handleVoiceChange} className="bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        <option value="none">No Voice</option>
-                        {voices.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
-                        <option value="" disabled>──────────</option>
-                        <option value="add_new_voice" className="font-semibold text-indigo-400">+ Add New Voice</option>
-                    </select>
-                </div>
-            </header>
-
             <div ref={chatBoxRef} className="flex-grow p-4 overflow-y-auto space-y-4">
                 {chatHistory.map((msg, index) => (
                     <div key={index} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         {msg.role === 'model' && (
                             <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                                { activePersona.name.charAt(0) }
+                                { activePersona?.name?.charAt(0) || 'P' }
                             </div>
                         )}
                         <div className={`max-w-md lg:max-w-xl px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
@@ -245,7 +202,7 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ personas, onAddP
                  {isLoading && (
                     <div className="flex items-end gap-2 justify-start">
                         <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                            { activePersona.name.charAt(0) }
+                            { activePersona?.name?.charAt(0) || 'P' }
                         </div>
                         <div className="px-4 py-2 rounded-lg bg-gray-700 text-gray-200">
                             <div className="flex items-center gap-1.5">

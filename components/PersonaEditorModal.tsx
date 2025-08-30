@@ -1,11 +1,11 @@
 
 
 import React, { useState, useCallback, ChangeEvent, useEffect, useMemo, useRef } from 'react';
-import { Persona, PersonaState, PersonaHistoryEntry, ChatMessage, PersonaCreationChatMessage, MbtiProfile } from '../types';
+import { Persona, PersonaState, PersonaHistoryEntry, ChatMessage, PersonaCreationChatMessage, MbtiProfile, Voice } from '../types';
 import * as geminiService from '../services/geminiService';
 // Fix: Removed unused 'BackIcon' which is not exported from './icons'.
 // Fix: Import EditIcon to resolve reference error.
-import { MagicWandIcon, TextIcon, SaveIcon, CloseIcon, HistoryIcon, SendIcon, UndoIcon, UploadIcon, SearchIcon, SparklesIcon, BrainIcon, EditIcon } from './icons';
+import { MagicWandIcon, TextIcon, SaveIcon, CloseIcon, HistoryIcon, SendIcon, UndoIcon, UploadIcon, SearchIcon, SparklesIcon, BrainIcon, EditIcon, BackIcon } from './icons';
 import { Loader } from './Loader';
 import { RadarChart } from './RadarChart';
 
@@ -97,6 +97,7 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({ isOpen, 
                     summary: importedData.summary || '',
                     sources: importedData.sources || [],
                     mbtiProfile: importedData.mbtiProfile,
+                    voiceId: importedData.voiceId
                 };
                 setLoadingMessage("Creating persona from JSON...");
                 await onSave(personaState);
@@ -183,14 +184,15 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({ isOpen, 
 
 // =========================================================================================
 
-interface PersonaEditorModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface PersonaEditorProps {
+  onBack: () => void;
   onSave: (persona: PersonaState & { id?: string }) => Promise<void>;
   initialPersona: Persona;
+  voices: Voice[];
+  onAddVoice: () => void;
 }
 
-const parameterLabels: Record<keyof Omit<PersonaState, 'id' | 'summary' | 'shortSummary' | 'shortTone' | 'sources' | 'mbtiProfile'>, string> = {
+const parameterLabels: Record<keyof Omit<PersonaState, 'id' | 'summary' | 'shortSummary' | 'shortTone' | 'sources' | 'mbtiProfile' | 'voiceId'>, string> = {
   name: "Name",
   role: "Role",
   tone: "Tone",
@@ -271,12 +273,21 @@ const ParameterDetailModal: React.FC<{
 };
 
 
-const ParametersPanel: React.FC<{
+interface ParametersPanelProps {
   parameters: PersonaState;
   onEditField: (field: keyof PersonaState, label: string) => void;
-}> = ({ parameters, onEditField }) => (
+  voices: Voice[];
+  onParameterChange: (field: keyof PersonaState, value: string) => void;
+  onAddVoice: () => void;
+}
+
+const ParametersPanel: React.FC<ParametersPanelProps> = ({ parameters, onEditField, voices, onParameterChange, onAddVoice }) => (
     <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg">
-        <h3 className="text-lg font-semibold text-gray-300 mb-2">Parameters</h3>
+        <h3 className="text-lg font-semibold text-gray-300">Parameters</h3>
+        <div className="text-sm text-gray-500 pb-2">
+            <p>ペルソナの基本的なパラメータをここで編集します。</p>
+            <p>各項目をタップして詳細を編集してください。</p>
+        </div>
         {Object.entries(parameterLabels).map(([key, label]) => (
             <TappableParameter
                 key={key}
@@ -285,6 +296,26 @@ const ParametersPanel: React.FC<{
                 onClick={() => onEditField(key as keyof PersonaState, label)}
             />
         ))}
+         <div className="bg-gray-800/60 p-3 rounded-lg">
+            <label htmlFor="voice-model-select" className="block text-sm font-medium text-gray-400 mb-1">Voice Model</label>
+            <select
+                id="voice-model-select"
+                value={parameters.voiceId || ''}
+                onChange={(e) => {
+                    if (e.target.value === 'add_new_voice') {
+                        onAddVoice();
+                    } else {
+                        onParameterChange('voiceId', e.target.value);
+                    }
+                }}
+                className="w-full bg-gray-700 text-white border border-gray-600 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+                <option value="">No Voice Assigned</option>
+                {voices.map(v => (<option key={v.id} value={v.id}>{v.name}</option>))}
+                <option disabled></option>
+                <option value="add_new_voice" style={{ fontWeight: 500, color: '#818cf8' }}>+ Add New Voice</option>
+            </select>
+        </div>
     </div>
 );
 
@@ -361,15 +392,12 @@ const MbtiPanel: React.FC<{
 
 
 const HistoryPanel: React.FC<{
-  previousParameters: (PersonaState & { id?: string }) | null;
-  handleUndo: () => void;
   initialPersona: Persona;
   handleRevert: (entry: PersonaHistoryEntry) => void;
-}> = ({ previousParameters, handleUndo, initialPersona, handleRevert }) => (
+}> = ({ initialPersona, handleRevert }) => (
     <div className="flex flex-col bg-gray-900/50 p-4 rounded-lg">
       <div className="flex justify-between items-center mb-4 flex-shrink-0">
         <h3 className="text-lg font-semibold text-gray-300">Version History</h3>
-        {previousParameters && <button onClick={handleUndo} className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"><UndoIcon /> Undo Last AI Edit</button>}
       </div>
       <div className="space-y-3">
         {initialPersona.history.length > 0 ? (
@@ -392,221 +420,154 @@ const HistoryPanel: React.FC<{
 );
 
 const AiToolsPanel: React.FC<{
-    parameters: PersonaState & { id?: string };
-    setParameters: React.Dispatch<React.SetStateAction<PersonaState & { id?: string; }>>;
-    setPreviousParameters: React.Dispatch<React.SetStateAction<(PersonaState & { id?: string; }) | null>>;
+    parameters: PersonaState;
+    initialPersona: Persona;
     isLoading: boolean;
-    setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
-    setLoadingMessage: React.Dispatch<React.SetStateAction<string>>;
-    setError: React.Dispatch<React.SetStateAction<string | null>>;
-    handleGenerateSummary: (params: PersonaState, message?: string) => Promise<void>;
-    setActiveTab: (tab: 'editor' | 'ai_tools' | 'chat') => void;
     onEditField: (field: keyof PersonaState, label: string) => void;
-}> = ({ parameters, setParameters, setPreviousParameters, isLoading, setIsLoading, setLoadingMessage, setError, handleGenerateSummary, setActiveTab, onEditField }) => {
-    const [searchTopic, setSearchTopic] = useState('');
-    const [refinementChatHistory, setRefinementChatHistory] = useState<PersonaCreationChatMessage[]>([]);
-    const [refinementChatInput, setRefinementChatInput] = useState('');
-    const [isRefinementChatLoading, setIsRefinementChatLoading] = useState(false);
-    const [showRefinementChat, setShowRefinementChat] = useState(false);
-    const [isChatInputFocused, setIsChatInputFocused] = useState(false);
-
-    const generateWelcomeMessage = useCallback(async () => {
-        // This check is important to prevent re-fetching on every render.
-        if (refinementChatHistory.length > 0) return;
-
-        setIsRefinementChatLoading(true);
-        setError(null);
-        try {
-            const welcomeText = await geminiService.generateRefinementWelcomeMessage(parameters);
-            const welcomeMessage: PersonaCreationChatMessage = { role: 'model', text: welcomeText };
-            setRefinementChatHistory([welcomeMessage]);
-        } catch (err) {
-            const errorMessage: PersonaCreationChatMessage = { 
-                role: 'model', 
-                text: "チャットを開始できませんでした。エラーが発生しました。" 
-            };
-            setRefinementChatHistory([errorMessage]);
-            setError(err instanceof Error ? err.message : "Failed to start chat.");
-        } finally {
-            setIsRefinementChatLoading(false);
-        }
-    }, [parameters, setError, refinementChatHistory.length]);
-
-    useEffect(() => {
-        // Only generate the welcome message if the chat is shown and is empty.
-        // This prevents re-generating the message on re-renders if it already exists.
-        if (showRefinementChat && refinementChatHistory.length === 0) {
-            generateWelcomeMessage();
-        }
-    }, [showRefinementChat, refinementChatHistory.length, generateWelcomeMessage]);
-
-
-    const handleCreateFromWeb = async () => {
-        if (!searchTopic.trim()) {
-          setError("Please enter a topic to search for.");
-          return;
-        }
-        setError(null);
-        setIsLoading(true);
-        setLoadingMessage("Searching the web and creating persona...");
-        setPreviousParameters(parameters); // for undo
-        try {
-          const { personaState } = await geminiService.createPersonaFromWeb(searchTopic);
-          const newParams = { ...parameters, ...personaState };
-          setParameters(newParams);
-          await handleGenerateSummary(newParams, "AI is generating a summary...");
-          setActiveTab('editor');
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed to create persona from the web.");
-          setPreviousParameters(null);
-        } finally {
-          setIsLoading(false);
-        }
-    };
-
-    const handleRefinementChatMessageSend = async () => {
-        if (!refinementChatInput.trim() || isRefinementChatLoading) return;
-        const newUserMessage: PersonaCreationChatMessage = { role: 'user', text: refinementChatInput };
-        const newHistory = [...refinementChatHistory, newUserMessage];
-        setRefinementChatHistory(newHistory);
-        setRefinementChatInput('');
-        setIsRefinementChatLoading(true);
-        setError(null);
-        
-        try {
-            const { responseText, updatedParameters } = await geminiService.continuePersonaCreationChat(newHistory, parameters);
-            const modelMessage: PersonaCreationChatMessage = { role: 'model', text: responseText };
-            setRefinementChatHistory(prev => [...prev, modelMessage]);
-            setParameters(prev => ({ ...prev, ...updatedParameters }));
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to get chat response.");
-            setRefinementChatHistory(refinementChatHistory); // Revert history
-        } finally {
-            setIsRefinementChatLoading(false);
-        }
-    };
-
-    if (showRefinementChat) {
-        return (
-            <div className="flex flex-col h-full bg-gray-900/50 rounded-lg p-4">
-                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-gray-200">Refine with AI Chat</h3>
-                    <button onClick={() => setShowRefinementChat(false)} className="text-sm text-indigo-400 hover:text-indigo-300">Done</button>
-                 </div>
-                <div className="flex-grow flex flex-col gap-4 min-h-0">
-                    <div className="flex-grow flex flex-col bg-gray-800/60 rounded-lg p-2 min-h-0">
-                        <div className="flex-grow overflow-y-auto pr-2 space-y-3">
-                            {refinementChatHistory.map((msg, index) => (
-                                <div key={index} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    {msg.role === 'model' && <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">AI</div>}
-                                    <div className={`max-w-md px-3 py-2 rounded-lg text-sm ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`}><p className="whitespace-pre-wrap">{msg.text}</p></div>
-                                </div>
-                            ))}
-                            {isRefinementChatLoading && <div className="flex items-end gap-2 justify-start"><div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">AI</div><div className="px-4 py-2 rounded-lg bg-gray-700 text-gray-200"><div className="flex items-center gap-1.5"><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.2s]"></span><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.4s]"></span></div></div></div>}
-                        </div>
-                        <div className="mt-2 flex gap-2">
-                            <input
-                                type="text"
-                                value={refinementChatInput}
-                                onChange={(e) => setRefinementChatInput(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && handleRefinementChatMessageSend()}
-                                onFocus={() => setIsChatInputFocused(true)}
-                                onBlur={() => setIsChatInputFocused(false)}
-                                placeholder="e.g., Make her more cynical"
-                                className="w-full bg-gray-700/80 rounded-md p-2 text-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                disabled={isRefinementChatLoading}
-                            />
-                            <button onClick={handleRefinementChatMessageSend} disabled={isRefinementChatLoading || !refinementChatInput.trim()} className="p-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800/50 rounded-md"><SendIcon /></button>
-                        </div>
-                    </div>
-                    {!isChatInputFocused && (
-                        <div className="flex-shrink-0 bg-gray-800/60 rounded-lg p-3">
-                            <h4 className="text-md font-semibold text-gray-300 mb-2">Live Preview</h4>
-                            <div className="max-h-24 overflow-y-auto space-y-2 pr-2">
-                                {Object.entries(parameterLabels).map(([key, label]) => (
-                                    <TappableParameter
-                                        key={key}
-                                        label={label}
-                                        value={parameters[key as keyof typeof parameterLabels] || ''}
-                                        onClick={() => onEditField(key as keyof PersonaState, label)}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    }
+    onAnalyzeMbti: () => void;
+    onRegenerate: (topic: string) => void;
+    onRevert: (entry: PersonaHistoryEntry) => void;
+}> = ({ parameters, initialPersona, isLoading, onEditField, onAnalyzeMbti, onRegenerate, onRevert }) => {
+    const [topic, setTopic] = useState('');
     
     return (
-        <div className="bg-gray-900/50 p-4 rounded-lg space-y-6">
-            <h3 className="text-lg font-semibold text-gray-300">AI Tools</h3>
-            <div>
-                <h4 className="text-md font-semibold text-gray-300 mb-2">Re-generate from Topic</h4>
-                <div className="flex gap-2">
-                    <input type="text" value={searchTopic} onChange={(e) => setSearchTopic(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleCreateFromWeb()} placeholder="e.g., 'A stoic samurai'" className="w-full bg-gray-800/60 rounded-md p-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    <button onClick={handleCreateFromWeb} disabled={isLoading || !searchTopic.trim()} className="flex-shrink-0 flex items-center gap-2 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800/50 text-sm rounded-md"><SearchIcon/> Generate</button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Overwrites current parameters based on a new topic.</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-6">
+                 <SummaryPanel parameters={parameters} onEditField={onEditField} />
+                 <MbtiPanel mbtiProfile={parameters.mbtiProfile} isLoading={isLoading} onAnalyze={onAnalyzeMbti} />
             </div>
-            <div>
-                 <button onClick={() => setShowRefinementChat(true)} className="w-full flex items-center gap-3 px-4 py-3 bg-gray-800 hover:bg-gray-700/80 transition-colors rounded-lg shadow-md text-left">
-                    <SparklesIcon />
-                    <div>
-                        <p className="font-semibold text-indigo-400">Refine with AI Chat</p>
-                        <p className="text-xs text-gray-500">Fine-tune persona parameters with conversational commands.</p>
+            <div className="space-y-6">
+                <div className="bg-gray-900/50 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold text-gray-300 mb-2">Re-generate from Topic</h3>
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={topic}
+                            onChange={(e) => setTopic(e.target.value)}
+                            placeholder="e.g., 'A stoic samurai'"
+                            className="w-full bg-gray-700/80 rounded-md p-2 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            disabled={isLoading}
+                        />
+                        <button onClick={() => onRegenerate(topic)} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-md shadow-lg disabled:bg-gray-600">
+                            <SearchIcon /> Generate
+                        </button>
                     </div>
-                </button>
+                    <p className="text-xs text-gray-500 mt-2">Overwrites current parameters based on a new topic.</p>
+                </div>
+                <HistoryPanel initialPersona={initialPersona} handleRevert={onRevert} />
+            </div>
+        </div>
+    );
+};
+
+const TestChatPanel: React.FC<{ persona: PersonaState }> = ({ persona }) => {
+    const [history, setHistory] = useState<ChatMessage[]>([]);
+    const [userInput, setUserInput] = useState('');
+    const [isChatLoading, setChatLoading] = useState(false);
+    const chatBoxRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setHistory([{ role: 'model', parts: [{ text: `こんにちは、${persona.name}です。何でも聞いてください。` }] }]);
+    }, [persona.name]);
+    
+    useEffect(() => {
+        if (chatBoxRef.current) {
+            chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
+        }
+    }, [history]);
+    
+    const handleSendMessage = async () => {
+        const messageText = userInput.trim();
+        if (!messageText || isChatLoading) return;
+
+        const newUserMessage: ChatMessage = { role: 'user', parts: [{ text: messageText }] };
+        const newHistory = [...history, newUserMessage];
+        setHistory(newHistory);
+        setUserInput('');
+        setChatLoading(true);
+
+        try {
+            const responseText = await geminiService.getPersonaChatResponse(persona, newHistory);
+            const modelMessage: ChatMessage = { role: 'model', parts: [{ text: responseText }] };
+            setHistory(prev => [...prev, modelMessage]);
+        } catch (error) {
+            const errorMessage: ChatMessage = { role: 'model', parts: [{ text: "申し訳ありません、エラーが発生しました。" }] };
+            setHistory(prev => [...prev, errorMessage]);
+        } finally {
+            setChatLoading(false);
+        }
+    };
+    
+    return (
+        <div className="flex flex-col h-[65vh] bg-gray-900/50 rounded-lg border border-gray-700">
+            <div ref={chatBoxRef} className="flex-grow p-4 overflow-y-auto space-y-4">
+                {history.map((msg, index) => (
+                    <div key={index} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        {msg.role === 'model' && (
+                            <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                { persona?.name?.charAt(0) || 'P' }
+                            </div>
+                        )}
+                        <div className={`max-w-md lg:max-w-xl px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
+                            <p className="whitespace-pre-wrap">{msg.parts[0].text}</p>
+                        </div>
+                    </div>
+                ))}
+                 {isChatLoading && (
+                    <div className="flex items-end gap-2 justify-start">
+                        <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                            { persona?.name?.charAt(0) || 'P' }
+                        </div>
+                        <div className="px-4 py-2 rounded-lg bg-gray-700 text-gray-200">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span>
+                                <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.2s]"></span>
+                                <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.4s]"></span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+            <div className="flex-shrink-0 p-4 border-t border-gray-700 flex items-center gap-2">
+                <input type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="メッセージを送信..." className="w-full bg-gray-700/80 rounded-md p-3 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" disabled={isChatLoading} />
+                <button onClick={handleSendMessage} disabled={isChatLoading || !userInput.trim()} className="p-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800/50 disabled:cursor-not-allowed transition-colors rounded-md shadow-lg flex items-center justify-center"><SendIcon /></button>
             </div>
         </div>
     );
 };
 
 
-export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, onClose, onSave, initialPersona }) => {
+const TabButton: React.FC<{ onClick: () => void; isActive: boolean; children: React.ReactNode }> = ({ onClick, isActive, children }) => (
+  <button
+    onClick={onClick}
+    className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500 ${
+      isActive
+        ? 'bg-indigo-600 text-white'
+        : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600'
+    }`}
+  >
+    {children}
+  </button>
+);
+
+
+export const PersonaEditorScreen: React.FC<PersonaEditorProps> = ({ onBack, onSave, initialPersona, voices, onAddVoice }) => {
   const [parameters, setParameters] = useState<PersonaState & { id: string }>({ ...emptyPersona, ...initialPersona });
-  const [previousParameters, setPreviousParameters] = useState<PersonaState & { id: string } | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<{ field: keyof PersonaState; label: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<'editor' | 'ai' | 'chat'>('editor');
 
-  const [activeTab, setActiveTab] = useState<'editor' | 'ai_tools' | 'chat'>('editor');
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [isChatLoading, setIsChatLoading] = useState(false);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when modal opens/closes or initial persona changes
+  // Reset state when initial persona changes
   useEffect(() => {
     setParameters({ ...emptyPersona, ...initialPersona });
-    setPreviousParameters(null);
     setError(null);
-    setActiveTab('editor');
-    setChatHistory([]);
-    setChatInput('');
     setEditingField(null);
-  }, [initialPersona, isOpen]);
-  
-  // Auto-scroll chat to the bottom
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [chatHistory]);
+    // setActiveTab('editor'); // Optional: reset to editor tab when persona changes
+  }, [initialPersona]);
 
-  const handleTabChange = (tab: 'editor' | 'ai_tools' | 'chat') => {
-    setActiveTab(tab);
-    if (tab === 'chat' && chatHistory.length === 0) {
-      const welcomeMessage: ChatMessage = {
-        role: 'model',
-        parts: [{ text: `こんにちは、${parameters.name}です。何かお話ししましょう。` }]
-      };
-      setChatHistory([welcomeMessage]);
-    }
-  };
-  
   const handleEditField = (field: keyof PersonaState, label: string) => {
     setEditingField({ field, label });
   };
@@ -614,6 +575,10 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
   const handleSaveField = (field: keyof PersonaState, value: string) => {
     setParameters(prev => ({ ...prev, [field]: value }));
     setEditingField(null);
+  };
+
+  const handleParameterChange = (field: keyof PersonaState, value: string) => {
+    setParameters(prev => ({ ...prev, [field]: value }));
   };
 
   const handleGenerateSummary = useCallback(async (paramsToSummarize: PersonaState, message = "AI is generating a summary...") => {
@@ -639,13 +604,11 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
     setError(null);
     setIsLoading(true);
     setLoadingMessage("AI is updating parameters from summary...");
-    setPreviousParameters(parameters); // Save current state for undo
     try {
       const extractedParams = await geminiService.updateParamsFromSummary(parameters.summary);
       setParameters(prev => ({ ...prev, ...extractedParams }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update parameters from summary.");
-      setPreviousParameters(null); // Clear undo state on error
     } finally {
       setIsLoading(false);
     }
@@ -664,6 +627,26 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
         setIsLoading(false);
     }
   };
+
+  const handleRegenerateFromTopic = useCallback(async (topic: string) => {
+    if (!topic.trim()) {
+        setError("Please enter a topic.");
+        return;
+    }
+    setError(null);
+    setIsLoading(true);
+    setLoadingMessage("AI is searching the web...");
+    try {
+        const { personaState, sources } = await geminiService.createPersonaFromWeb(topic);
+        setLoadingMessage("AI is generating a summary...");
+        const summary = await geminiService.generateSummaryFromParams({ ...parameters, ...personaState, name: personaState.name || parameters.name });
+        setParameters(prev => ({ ...prev, ...personaState, summary, sources }));
+    } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to generate persona from topic.");
+    } finally {
+        setIsLoading(false);
+    }
+  }, [parameters]);
   
   const handleSave = async () => {
     if (!parameters.name) { setError("Persona name is required."); return; }
@@ -671,7 +654,6 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
     setLoadingMessage("Saving and analyzing changes...");
     try {
       await onSave(parameters);
-      setActiveTab('editor');
     } catch (err) {
         setError(err instanceof Error ? err.message : "An unknown error occurred during save.");
     } finally {
@@ -681,119 +663,63 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
 
   const handleRevert = useCallback((historyEntry: PersonaHistoryEntry) => {
     setParameters(prev => ({ ...prev, ...historyEntry.state }));
-    setPreviousParameters(null); // History revert clears undo state
   }, []);
   
-  const handleUndo = useCallback(() => {
-    if (previousParameters) {
-        setParameters(previousParameters);
-        setPreviousParameters(null);
-    }
-  }, [previousParameters]);
-
-  const handleSendMessage = async () => {
-    if (!chatInput.trim() || isChatLoading) return;
-    const newUserMessage: ChatMessage = { role: 'user', parts: [{ text: chatInput }] };
-    const newHistory = [...chatHistory, newUserMessage];
-    setChatHistory(newHistory);
-    setChatInput('');
-    setIsChatLoading(true);
-    setError(null);
-    try {
-      const responseText = await geminiService.getPersonaChatResponse(parameters, newHistory);
-      const modelMessage: ChatMessage = { role: 'model', parts: [{ text: responseText }] };
-      setChatHistory(prev => [...prev, modelMessage]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to get chat response.");
-      setChatHistory(chatHistory); // Revert history on error
-    } finally {
-      setIsChatLoading(false);
-    }
-  };
-  
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4" onClick={onClose}>
+    <div className="flex flex-col">
        {isLoading && <Loader message={loadingMessage} />}
-      <div className="bg-gray-800/90 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col relative" onClick={e => e.stopPropagation()}>
-        <header className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-500">{initialPersona.name}</h2>
-          <div className="flex items-center gap-2">
-              <div className="flex gap-1 bg-gray-900 p-1 rounded-lg">
-                <button onClick={() => handleTabChange('editor')} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTab === 'editor' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>Editor</button>
-                <button onClick={() => handleTabChange('ai_tools')} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTab === 'ai_tools' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>AI Tools</button>
-                <button onClick={() => handleTabChange('chat')} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTab === 'chat' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>Test Chat</button>
-              </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-white"><CloseIcon/></button>
-          </div>
+       
+       <header className="flex items-center gap-4 mb-6">
+            <button onClick={onBack} className="text-gray-400 hover:text-white p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Back to persona list">
+                <BackIcon />
+            </button>
+            <h2 className="text-2xl font-bold text-indigo-400 flex-shrink-0">{parameters.name}</h2>
+            <div className="flex gap-2 p-1 bg-gray-800 rounded-lg ml-4">
+                <TabButton isActive={activeTab === 'editor'} onClick={() => setActiveTab('editor')}>Editor</TabButton>
+                <TabButton isActive={activeTab === 'ai'} onClick={() => setActiveTab('ai')}>AI Tools</TabButton>
+                <TabButton isActive={activeTab === 'chat'} onClick={() => setActiveTab('chat')}>Test Chat</TabButton>
+            </div>
         </header>
         
-        <main className="flex-grow p-1 sm:p-6 overflow-y-auto min-h-0">
+        <main className="flex-grow min-h-0">
           {error && <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-2 rounded-md mb-4 text-sm">{error}</div>}
           
-          {activeTab === 'editor' && (
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                 <div className="space-y-6">
-                     <ParametersPanel parameters={parameters} onEditField={handleEditField}/>
-                 </div>
-                 <div className="space-y-6">
-                     <SummaryPanel parameters={parameters} onEditField={handleEditField} />
-                     <MbtiPanel mbtiProfile={parameters.mbtiProfile} isLoading={isLoading} onAnalyze={handleAnalyzeMbti} />
-                     <HistoryPanel previousParameters={previousParameters} handleUndo={handleUndo} initialPersona={initialPersona} handleRevert={handleRevert} />
+           {activeTab === 'editor' && (
+                <div className="grid grid-cols-1 gap-6">
+                    <ParametersPanel 
+                        parameters={parameters} 
+                        onEditField={handleEditField}
+                        voices={voices}
+                        onParameterChange={handleParameterChange}
+                        onAddVoice={onAddVoice}
+                    />
                 </div>
-            </div>
-          )}
+           )}
 
-          {activeTab === 'ai_tools' && (
-              <AiToolsPanel 
-                parameters={parameters}
-                setParameters={setParameters}
-                setPreviousParameters={setPreviousParameters}
-                isLoading={isLoading}
-                setIsLoading={setIsLoading}
-                setLoadingMessage={setLoadingMessage}
-                setError={setError}
-                handleGenerateSummary={handleGenerateSummary}
-                setActiveTab={setActiveTab}
-                onEditField={handleEditField}
-              />
-          )}
+            {activeTab === 'ai' && (
+                 <AiToolsPanel
+                    parameters={parameters}
+                    initialPersona={initialPersona}
+                    isLoading={isLoading}
+                    onEditField={handleEditField}
+                    onAnalyzeMbti={handleAnalyzeMbti}
+                    onRegenerate={handleRegenerateFromTopic}
+                    onRevert={handleRevert}
+                />
+            )}
 
-          {activeTab === 'chat' && (
-             <div className="flex flex-col h-full bg-gray-900/50 rounded-lg">
-                <div ref={chatContainerRef} className="flex-grow p-4 overflow-y-auto space-y-4">
-                    {chatHistory.map((msg, index) => (
-                        <div key={index} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            {msg.role === 'model' && <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">{parameters.name.charAt(0) || 'P'}</div>}
-                            <div className={`max-w-md lg:max-w-xl px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
-                                <p className="whitespace-pre-wrap">{msg.parts[0].text}</p>
-                            </div>
-                        </div>
-                    ))}
-                    {isChatLoading && <div className="flex items-end gap-2 justify-start">
-                        <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">{parameters.name.charAt(0) || 'P'}</div>
-                        <div className="px-4 py-2 rounded-lg bg-gray-700 text-gray-200">
-                          <div className="flex items-center gap-1.5"><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.2s]"></span><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.4s]"></span></div>
-                        </div>
-                    </div>}
-                </div>
-                <div className="flex-shrink-0 p-4 border-t border-gray-700 flex items-center gap-2">
-                    <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="ペルソナとしてメッセージをテスト..." className="w-full bg-gray-700/80 rounded-md p-3 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" disabled={isChatLoading} />
-                    <button onClick={handleSendMessage} disabled={isChatLoading || !chatInput.trim()} className="p-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800/50 disabled:cursor-not-allowed transition-colors rounded-md shadow-lg flex items-center justify-center"><SendIcon /></button>
-                </div>
-             </div>
-          )}
+            {activeTab === 'chat' && (
+                <TestChatPanel persona={parameters} />
+            )}
         </main>
         
-        <footer className="flex-shrink-0 flex justify-end p-4 border-t border-gray-700">
-            <button onClick={onClose} className="px-4 py-2 text-gray-300 hover:text-white mr-2">Cancel</button>
+        <footer className="flex-shrink-0 flex justify-end p-4 mt-6 border-t border-gray-700">
+            <button onClick={onBack} className="px-4 py-2 text-gray-300 hover:text-white mr-2">Cancel</button>
             <button onClick={handleSave} disabled={isLoading || !parameters.name} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-md shadow-lg disabled:bg-gray-600 disabled:cursor-not-allowed">
                 <SaveIcon />
                 Save Persona
             </button>
         </footer>
-      </div>
        <ParameterDetailModal
             isOpen={!!editingField}
             onClose={() => setEditingField(null)}

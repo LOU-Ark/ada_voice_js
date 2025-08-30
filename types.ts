@@ -31,6 +31,7 @@ export interface PersonaState {
   shortTone?: string; // New field for card tone summary
   sources?: WebSource[]; // Added for web sources
   mbtiProfile?: MbtiProfile; // Added for MBTI analysis
+  voiceId?: string; // ID of the assigned voice model
 }
 
 // Represents a single entry in the persona's history
