@@ -239,7 +239,7 @@ ${JSON.stringify({ name: personaState.name, role: personaState.role, tone: perso
 2.  これから対話によって自分の設定が変更できることの説明
 3.  設定変更の具体例を2つ提示（例：「もっと皮肉屋にして」「丁寧な口調に変えて」など）
 
-上記の要素を盛り込み、自然な一つの挨拶文として返答してください。返答は挨拶の文章のみで、他のテキストは含めないでください。`;
+上記の要素を盛り込み、自然な一つの挨拶文として返答してください。挨拶文は簡潔に、全体で80文字以内にまとめてください。返答は挨拶の文章のみで、他のテキストは含めないでください。`;
     
     try {
         const response = await ai.models.generateContent({
@@ -265,7 +265,7 @@ export const continuePersonaCreationChat = async (
 
 あなたの応答は、必ず単一の有効なJSONオブジェクトでなければなりません。JSONの前後に他のテキストやマークダウンの囲みを含めないでください。
 JSONオブジェクトは次の2つのキーを持つ必要があります:
-1. "responseText": (string) ユーザーへの会話形式の返答（日本語）。
+1. "responseText": (string) ユーザーへの会話形式の返答（日本語）。返答は簡潔に、最大80文字程度にしてください。
 2. "updatedParameters": (object) 更新または追加されたペルソナのパラメータのみを含むオブジェクト。このオブジェクトの各値は必ず文字列でなければなりません。
 
 現在のペルソナの状態:
@@ -303,16 +303,34 @@ ${JSON.stringify(currentParams, null, 2)}
         }
     }
 
-    if (!jsonText) {
-      throw new Error("AI returned an empty response.");
+    try {
+        if (!jsonText) {
+            throw new Error("AI returned an empty response string.");
+        }
+        const parsed = JSON.parse(jsonText);
+        return {
+          responseText: parsed.responseText || "...",
+          updatedParameters: parsed.updatedParameters || {}
+        };
+    } catch (parseError) {
+        // If parsing fails, assume the entire response is conversational text.
+        // This handles cases where the model doesn't return valid JSON.
+        console.warn("Failed to parse AI response as JSON, treating as conversational text:", jsonText);
+        return {
+            responseText: jsonText, // The whole non-JSON string is the response
+            updatedParameters: {}   // No parameters were updated
+        };
     }
-    const parsed = JSON.parse(jsonText);
-    return {
-      responseText: parsed.responseText || "...",
-      updatedParameters: parsed.updatedParameters || {}
-    };
+
   } catch (error) {
     console.error("Error during persona creation chat:", error);
+    
+    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+    // Check for rate limit / quota exhaustion error and provide a user-friendly message.
+    if (errorMessage.includes("RESOURCE_EXHAUSTED") || errorMessage.includes('"code":429')) {
+        throw new Error("API rate limit or quota exceeded. Please check your plan and billing details with Google AI Studio.");
+    }
+
     throw new Error("ペルソナ作成中にAIからの有効な応答を取得できませんでした。");
   }
 };

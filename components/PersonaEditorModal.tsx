@@ -1,16 +1,18 @@
 
+
 import React, { useState, useCallback, ChangeEvent, useEffect, useMemo, useRef } from 'react';
 import { Persona, PersonaState, PersonaHistoryEntry, ChatMessage, PersonaCreationChatMessage, MbtiProfile } from '../types';
 import * as geminiService from '../services/geminiService';
 // Fix: Removed unused 'BackIcon' which is not exported from './icons'.
-import { MagicWandIcon, TextIcon, SaveIcon, CloseIcon, HistoryIcon, SendIcon, UndoIcon, UploadIcon, SearchIcon, SparklesIcon, BrainIcon } from './icons';
+// Fix: Import EditIcon to resolve reference error.
+import { MagicWandIcon, TextIcon, SaveIcon, CloseIcon, HistoryIcon, SendIcon, UndoIcon, UploadIcon, SearchIcon, SparklesIcon, BrainIcon, EditIcon } from './icons';
 import { Loader } from './Loader';
 import { RadarChart } from './RadarChart';
 
 interface CreatePersonaModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (persona: PersonaState) => void;
+  onSave: (persona: PersonaState) => Promise<void>;
 }
 
 const emptyPersona: PersonaState = {
@@ -39,12 +41,20 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({ isOpen, 
         }
     }, [isOpen, resetState]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!name.trim()) {
             setError('Persona name is required.');
             return;
         }
-        onSave({ ...emptyPersona, name, summary });
+        setIsLoading(true);
+        setLoadingMessage("Creating persona...");
+        try {
+            await onSave({ ...emptyPersona, name, summary });
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to create persona.");
+        } finally {
+            setIsLoading(false);
+        }
     };
     
     const handleFileUploadForExtraction = useCallback(async (file: File) => {
@@ -88,13 +98,16 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({ isOpen, 
                     sources: importedData.sources || [],
                     mbtiProfile: importedData.mbtiProfile,
                 };
-                onSave(personaState);
+                setLoadingMessage("Creating persona from JSON...");
+                await onSave(personaState);
 
             } else { // isText
                 setLoadingMessage("AI is analyzing the document...");
                 const extractedParams = await geminiService.extractParamsFromDoc(text);
+                setLoadingMessage("AI is generating a summary...");
                 const summary = await geminiService.generateSummaryFromParams(extractedParams);
-                onSave({ ...extractedParams, summary });
+                setLoadingMessage("Finalizing persona...");
+                await onSave({ ...extractedParams, summary });
             }
         } catch (err) {
             if (err instanceof SyntaxError) {
@@ -173,53 +186,118 @@ export const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({ isOpen, 
 interface PersonaEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (persona: PersonaState & { id?: string }) => void;
+  onSave: (persona: PersonaState & { id?: string }) => Promise<void>;
   initialPersona: Persona;
 }
-  
-const ParameterInput: React.FC<{ name: string, label: string, value: string, onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void, isTextArea?: boolean }> = ({ name, label, value, onChange, isTextArea = false }) => (
-    <div>
-      <label htmlFor={name} className="block text-sm font-medium text-gray-400 mb-1">{label}</label>
-      {isTextArea ? (
-        <textarea id={name} name={name} value={value} onChange={onChange} rows={3} className="w-full bg-gray-800/60 rounded-md p-2 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" />
-      ) : (
-        <input type="text" id={name} name={name} value={value} onChange={onChange} className="w-full bg-gray-800/60 rounded-md p-2 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" />
-      )}
+
+const parameterLabels: Record<keyof Omit<PersonaState, 'id' | 'summary' | 'shortSummary' | 'shortTone' | 'sources' | 'mbtiProfile'>, string> = {
+  name: "Name",
+  role: "Role",
+  tone: "Tone",
+  personality: "Personality",
+  worldview: "Worldview / Background",
+  experience: "Experience / History",
+  other: "Other Notes"
+};
+
+
+const TappableParameter: React.FC<{ label: string, value: string, onClick: () => void }> = ({ label, value, onClick }) => (
+    <div onClick={onClick} className="bg-gray-800/60 p-3 rounded-lg cursor-pointer hover:bg-gray-700/80 transition-colors group">
+        <div className="flex justify-between items-center">
+            <label className="block text-sm font-medium text-gray-400 mb-1">{label}</label>
+            <EditIcon className="h-4 w-4 text-gray-500 group-hover:text-indigo-400 transition-colors" />
+        </div>
+        <p className="text-gray-300 text-sm line-clamp-2 pr-4">
+            {value || <span className="italic text-gray-500">Not set</span>}
+        </p>
     </div>
 );
 
+const ParameterDetailModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (field: keyof PersonaState, value: string) => void;
+  fieldData: { field: keyof PersonaState; label: string; value: string } | null;
+  children?: React.ReactNode;
+}> = ({ isOpen, onClose, onSave, fieldData, children }) => {
+    const [currentValue, setCurrentValue] = useState('');
+
+    useEffect(() => {
+        if (fieldData) {
+            setCurrentValue(fieldData.value);
+        }
+    }, [fieldData]);
+
+    if (!isOpen || !fieldData) return null;
+
+    const handleSave = () => {
+        onSave(fieldData.field, currentValue);
+    };
+
+    const isTextArea = fieldData.field !== 'name';
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-[60] p-4" onClick={onClose}>
+            <div className="bg-gray-800/90 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl w-full max-w-2xl flex flex-col relative h-[70vh]" onClick={e => e.stopPropagation()}>
+                <header className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-700">
+                    <h3 className="text-lg font-bold text-gray-200">{fieldData.label}</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white"><CloseIcon /></button>
+                </header>
+                <main className="p-4 flex-grow flex flex-col min-h-0">
+                    {isTextArea ? (
+                         <textarea
+                            value={currentValue}
+                            onChange={e => setCurrentValue(e.target.value)}
+                            className="w-full h-full bg-gray-900 rounded-md p-3 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                    ) : (
+                         <input
+                            type="text"
+                            value={currentValue}
+                            onChange={e => setCurrentValue(e.target.value)}
+                            className="w-full bg-gray-900 rounded-md p-3 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                         />
+                    )}
+                   
+                    {children && <div className="flex-shrink-0 mt-4">{children}</div>}
+                </main>
+                <footer className="flex-shrink-0 flex justify-end p-4 border-t border-gray-700">
+                     <button onClick={onClose} className="px-4 py-2 text-gray-300 hover:text-white mr-2">Cancel</button>
+                     <button onClick={handleSave} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-md shadow-lg">Done</button>
+                </footer>
+            </div>
+        </div>
+    );
+};
+
+
 const ParametersPanel: React.FC<{
   parameters: PersonaState;
-  handleParamChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
-}> = ({ parameters, handleParamChange }) => (
-    <div className="space-y-4">
+  onEditField: (field: keyof PersonaState, label: string) => void;
+}> = ({ parameters, onEditField }) => (
+    <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg">
         <h3 className="text-lg font-semibold text-gray-300 mb-2">Parameters</h3>
-        <ParameterInput name="name" label="Name" value={parameters.name} onChange={handleParamChange} />
-        <ParameterInput name="role" label="Role" value={parameters.role} onChange={handleParamChange} isTextArea />
-        <ParameterInput name="tone" label="Tone" value={parameters.tone} onChange={handleParamChange} isTextArea />
-        <ParameterInput name="personality" label="Personality" value={parameters.personality} onChange={handleParamChange} isTextArea />
-        <ParameterInput name="worldview" label="Worldview / Background" value={parameters.worldview} onChange={handleParamChange} isTextArea />
-        <ParameterInput name="experience" label="Experience / History" value={parameters.experience} onChange={handleParamChange} isTextArea />
-        <ParameterInput name="other" label="Other Notes" value={parameters.other} onChange={handleParamChange} isTextArea />
+        {Object.entries(parameterLabels).map(([key, label]) => (
+            <TappableParameter
+                key={key}
+                label={label}
+                value={parameters[key as keyof typeof parameterLabels]}
+                onClick={() => onEditField(key as keyof PersonaState, label)}
+            />
+        ))}
     </div>
 );
 
 const SummaryPanel: React.FC<{
   parameters: PersonaState;
-  handleSummaryChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
-  isLoading: boolean;
-  handleGenerateSummary: (params: PersonaState, message?: string) => void;
-  handleSyncFromSummary: () => void;
-}> = ({ parameters, handleSummaryChange, isLoading, handleGenerateSummary, handleSyncFromSummary }) => (
-    <div className="flex flex-col">
+  onEditField: (field: keyof PersonaState, label: string) => void;
+}> = ({ parameters, onEditField }) => (
+    <div className="bg-gray-900/50 p-4 rounded-lg">
         <h3 className="text-lg font-semibold text-gray-300 mb-2">AI-Generated Summary</h3>
-        <textarea
-          name="summary"
-          value={parameters.summary}
-          onChange={handleSummaryChange}
-          className="w-full bg-gray-800/60 rounded-md p-3 text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
-          placeholder="AI-generated summary will appear here. You can also edit it directly."
-          rows={10}
+        <TappableParameter
+            label="Summary"
+            value={parameters.summary}
+            onClick={() => onEditField('summary', 'AI-Generated Summary')}
         />
         {parameters.sources && parameters.sources.length > 0 && (
             <div className="mt-4">
@@ -231,10 +309,6 @@ const SummaryPanel: React.FC<{
                 </ul>
             </div>
         )}
-         <div className="flex flex-col gap-2 mt-4">
-          <button onClick={() => handleGenerateSummary(parameters, "AI is updating summary...")} disabled={isLoading || !parameters.name} className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-sm bg-indigo-600/80 hover:bg-indigo-600 disabled:bg-indigo-900/50 disabled:cursor-not-allowed transition-colors rounded-md"><MagicWandIcon /> Refresh Summary</button>
-          <button onClick={handleSyncFromSummary} disabled={isLoading || !parameters.summary} className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700/50 disabled:cursor-not-allowed transition-colors rounded-md"><TextIcon /> Sync from Summary</button>
-         </div>
       </div>
 );
 
@@ -255,7 +329,7 @@ const MbtiPanel: React.FC<{
     }, [mbtiProfile]);
 
     return (
-        <div className="flex flex-col">
+        <div className="flex flex-col bg-gray-900/50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold text-gray-300 mb-2">MBTI Personality Profile</h3>
             {!mbtiProfile ? (
                 <div className="text-center bg-gray-800/60 rounded-lg p-6 flex flex-col items-center justify-center">
@@ -292,7 +366,7 @@ const HistoryPanel: React.FC<{
   initialPersona: Persona;
   handleRevert: (entry: PersonaHistoryEntry) => void;
 }> = ({ previousParameters, handleUndo, initialPersona, handleRevert }) => (
-    <div className="flex flex-col">
+    <div className="flex flex-col bg-gray-900/50 p-4 rounded-lg">
       <div className="flex justify-between items-center mb-4 flex-shrink-0">
         <h3 className="text-lg font-semibold text-gray-300">Version History</h3>
         {previousParameters && <button onClick={handleUndo} className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"><UndoIcon /> Undo Last AI Edit</button>}
@@ -327,12 +401,14 @@ const AiToolsPanel: React.FC<{
     setError: React.Dispatch<React.SetStateAction<string | null>>;
     handleGenerateSummary: (params: PersonaState, message?: string) => Promise<void>;
     setActiveTab: (tab: 'editor' | 'ai_tools' | 'chat') => void;
-}> = ({ parameters, setParameters, setPreviousParameters, isLoading, setIsLoading, setLoadingMessage, setError, handleGenerateSummary, setActiveTab }) => {
+    onEditField: (field: keyof PersonaState, label: string) => void;
+}> = ({ parameters, setParameters, setPreviousParameters, isLoading, setIsLoading, setLoadingMessage, setError, handleGenerateSummary, setActiveTab, onEditField }) => {
     const [searchTopic, setSearchTopic] = useState('');
     const [refinementChatHistory, setRefinementChatHistory] = useState<PersonaCreationChatMessage[]>([]);
     const [refinementChatInput, setRefinementChatInput] = useState('');
     const [isRefinementChatLoading, setIsRefinementChatLoading] = useState(false);
     const [showRefinementChat, setShowRefinementChat] = useState(false);
+    const [isChatInputFocused, setIsChatInputFocused] = useState(false);
 
     const generateWelcomeMessage = useCallback(async () => {
         // This check is important to prevent re-fetching on every render.
@@ -417,8 +493,8 @@ const AiToolsPanel: React.FC<{
                     <h3 className="text-xl font-bold text-gray-200">Refine with AI Chat</h3>
                     <button onClick={() => setShowRefinementChat(false)} className="text-sm text-indigo-400 hover:text-indigo-300">Done</button>
                  </div>
-                <div className="flex-grow grid grid-rows-2 gap-4 min-h-0">
-                    <div className="flex flex-col bg-gray-800/60 rounded-lg p-2">
+                <div className="flex-grow flex flex-col gap-4 min-h-0">
+                    <div className="flex-grow flex flex-col bg-gray-800/60 rounded-lg p-2 min-h-0">
                         <div className="flex-grow overflow-y-auto pr-2 space-y-3">
                             {refinementChatHistory.map((msg, index) => (
                                 <div key={index} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -429,21 +505,35 @@ const AiToolsPanel: React.FC<{
                             {isRefinementChatLoading && <div className="flex items-end gap-2 justify-start"><div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">AI</div><div className="px-4 py-2 rounded-lg bg-gray-700 text-gray-200"><div className="flex items-center gap-1.5"><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.2s]"></span><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.4s]"></span></div></div></div>}
                         </div>
                         <div className="mt-2 flex gap-2">
-                            <input type="text" value={refinementChatInput} onChange={(e) => setRefinementChatInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleRefinementChatMessageSend()} placeholder="e.g., Make her more cynical" className="w-full bg-gray-700/80 rounded-md p-2 text-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" disabled={isRefinementChatLoading}/>
+                            <input
+                                type="text"
+                                value={refinementChatInput}
+                                onChange={(e) => setRefinementChatInput(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handleRefinementChatMessageSend()}
+                                onFocus={() => setIsChatInputFocused(true)}
+                                onBlur={() => setIsChatInputFocused(false)}
+                                placeholder="e.g., Make her more cynical"
+                                className="w-full bg-gray-700/80 rounded-md p-2 text-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                disabled={isRefinementChatLoading}
+                            />
                             <button onClick={handleRefinementChatMessageSend} disabled={isRefinementChatLoading || !refinementChatInput.trim()} className="p-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800/50 rounded-md"><SendIcon /></button>
                         </div>
                     </div>
-                    <div className="flex flex-col bg-gray-800/60 rounded-lg p-3 overflow-y-auto">
-                        <h4 className="text-md font-semibold text-gray-300 mb-2">Live Preview</h4>
-                        <div className="space-y-2 text-xs">
-                        {Object.entries(emptyPersona).filter(([key]) => key !== 'summary' && key !== 'sources' && key !== 'mbtiProfile').map(([key]) => (
-                            <div key={key}>
-                            <label className="text-xs font-medium text-gray-400 capitalize">{key}</label>
-                            <p className="w-full bg-gray-900/50 rounded-md p-1.5 mt-1 text-gray-300 min-h-[1.8rem]">{parameters[key as keyof Omit<PersonaState, 'summary' | 'sources' | 'mbtiProfile'>] || <span className="text-gray-500">...</span>}</p>
+                    {!isChatInputFocused && (
+                        <div className="flex-shrink-0 bg-gray-800/60 rounded-lg p-3">
+                            <h4 className="text-md font-semibold text-gray-300 mb-2">Live Preview</h4>
+                            <div className="max-h-24 overflow-y-auto space-y-2 pr-2">
+                                {Object.entries(parameterLabels).map(([key, label]) => (
+                                    <TappableParameter
+                                        key={key}
+                                        label={label}
+                                        value={parameters[key as keyof typeof parameterLabels] || ''}
+                                        onClick={() => onEditField(key as keyof PersonaState, label)}
+                                    />
+                                ))}
                             </div>
-                        ))}
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
         );
@@ -480,6 +570,7 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<{ field: keyof PersonaState; label: string } | null>(null);
 
   const [activeTab, setActiveTab] = useState<'editor' | 'ai_tools' | 'chat'>('editor');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -495,6 +586,7 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
     setActiveTab('editor');
     setChatHistory([]);
     setChatInput('');
+    setEditingField(null);
   }, [initialPersona, isOpen]);
   
   // Auto-scroll chat to the bottom
@@ -514,6 +606,15 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
       setChatHistory([welcomeMessage]);
     }
   };
+  
+  const handleEditField = (field: keyof PersonaState, label: string) => {
+    setEditingField({ field, label });
+  };
+
+  const handleSaveField = (field: keyof PersonaState, value: string) => {
+    setParameters(prev => ({ ...prev, [field]: value }));
+    setEditingField(null);
+  };
 
   const handleGenerateSummary = useCallback(async (paramsToSummarize: PersonaState, message = "AI is generating a summary...") => {
     if(!paramsToSummarize.name) {
@@ -531,16 +632,6 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
     } finally {
       setIsLoading(false);
     }
-  }, []);
-  
-  const handleParamChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setParameters(prev => ({ ...prev, [name]: value }));
-  }, []);
-  
-  const handleSummaryChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
-    const { value } = e.target;
-    setParameters(prev => ({ ...prev, summary: value }));
   }, []);
 
   const handleSyncFromSummary = async () => {
@@ -627,7 +718,7 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
        {isLoading && <Loader message={loadingMessage} />}
       <div className="bg-gray-800/90 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col relative" onClick={e => e.stopPropagation()}>
         <header className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-500">Edit Persona: {initialPersona.name}</h2>
+          <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-500">{initialPersona.name}</h2>
           <div className="flex items-center gap-2">
               <div className="flex gap-1 bg-gray-900 p-1 rounded-lg">
                 <button onClick={() => handleTabChange('editor')} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTab === 'editor' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>Editor</button>
@@ -642,35 +733,12 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
           {error && <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-2 rounded-md mb-4 text-sm">{error}</div>}
           
           {activeTab === 'editor' && (
-             <div>
-                {/* Desktop View */}
-                <div className={`hidden md:grid gap-6 grid-cols-3`}>
-                  <div className="bg-gray-900/50 p-4 rounded-lg"><ParametersPanel parameters={parameters} handleParamChange={handleParamChange}/></div>
-                  <div className="bg-gray-900/50 p-4 rounded-lg flex flex-col gap-6">
-                    <SummaryPanel 
-                      parameters={parameters} 
-                      handleSummaryChange={handleSummaryChange}
-                      isLoading={isLoading}
-                      handleGenerateSummary={handleGenerateSummary}
-                      handleSyncFromSummary={handleSyncFromSummary}
-                    />
-                    <MbtiPanel 
-                        mbtiProfile={parameters.mbtiProfile}
-                        isLoading={isLoading}
-                        onAnalyze={handleAnalyzeMbti}
-                    />
-                  </div>
-                  <div className="bg-gray-900/50 p-4 rounded-lg flex flex-col"><HistoryPanel 
-                      previousParameters={previousParameters}
-                      handleUndo={handleUndo}
-                      initialPersona={initialPersona}
-                      handleRevert={handleRevert}
-                    /></div>
-                </div>
-                 {/* Mobile View - simplified to a single scrollable column */}
-                <div className="md:hidden space-y-6 p-4">
-                     <ParametersPanel parameters={parameters} handleParamChange={handleParamChange}/>
-                     <SummaryPanel parameters={parameters} handleSummaryChange={handleSummaryChange} isLoading={isLoading} handleGenerateSummary={handleGenerateSummary} handleSyncFromSummary={handleSyncFromSummary} />
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                 <div className="space-y-6">
+                     <ParametersPanel parameters={parameters} onEditField={handleEditField}/>
+                 </div>
+                 <div className="space-y-6">
+                     <SummaryPanel parameters={parameters} onEditField={handleEditField} />
                      <MbtiPanel mbtiProfile={parameters.mbtiProfile} isLoading={isLoading} onAnalyze={handleAnalyzeMbti} />
                      <HistoryPanel previousParameters={previousParameters} handleUndo={handleUndo} initialPersona={initialPersona} handleRevert={handleRevert} />
                 </div>
@@ -688,6 +756,7 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
                 setError={setError}
                 handleGenerateSummary={handleGenerateSummary}
                 setActiveTab={setActiveTab}
+                onEditField={handleEditField}
               />
           )}
 
@@ -725,6 +794,22 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
             </button>
         </footer>
       </div>
+       <ParameterDetailModal
+            isOpen={!!editingField}
+            onClose={() => setEditingField(null)}
+            onSave={handleSaveField}
+            // FIX: Ensure value passed to ParameterDetailModal is a string. The `parameters` object can
+            // contain non-string values (like `sources` or `mbtiProfile`), but the modal is only 
+            // designed for editing strings. This check prevents a type error.
+            fieldData={editingField ? { ...editingField, value: typeof parameters[editingField.field] === 'string' ? parameters[editingField.field] as string : '' } : null}
+        >
+            {editingField?.field === 'summary' && (
+                 <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                  <button onClick={async () => { await handleGenerateSummary(parameters); setEditingField(null); }} disabled={isLoading || !parameters.name} className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-sm bg-indigo-600/80 hover:bg-indigo-600 disabled:bg-indigo-900/50 disabled:cursor-not-allowed transition-colors rounded-md"><MagicWandIcon /> Refresh Summary</button>
+                  <button onClick={async () => { await handleSyncFromSummary(); setEditingField(null); }} disabled={isLoading || !parameters.summary} className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700/50 disabled:cursor-not-allowed transition-colors rounded-md"><TextIcon /> Sync from Summary</button>
+                 </div>
+            )}
+       </ParameterDetailModal>
     </div>
   );
 };
