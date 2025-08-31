@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Serverless functions for the Interactive Persona Editor",
+  "scripts": {
+    "build": "echo \"Build step not required. Deploying static files and serverless functions.\""
+  },
   "dependencies": {
     "@google/genai": "^1.15.0"
   },
