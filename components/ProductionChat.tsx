@@ -71,32 +71,33 @@ export const ProductionChat: React.FC<ProductionChatProps> = ({ persona: activeP
 
     const speak = useCallback(async (text: string) => {
         const voice = voices.find(v => v.id === selectedVoiceId);
-        if (!isTtsEnabled || !text || !voice) return;
+        if (!isTtsEnabled || !text || !voice || !voice.token || !voice.voiceId) {
+             if (isTtsEnabled && text && !voice) console.warn("TTS is enabled, but no voice is selected or configured.");
+             return;
+        }
         
         stopPlayback();
 
         try {
-            const response = await fetch('/api/tts', {
+            const API_URL = "https://api.fish.audio/v1/tts";
+            const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    "Authorization": `Bearer ${voice.token}`,
+                    "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    text: text,
-                    voiceConfigId: voice.id,
-                    token: voice.token,
-                    voiceId: voice.voiceId,
+                    "reference_id": voice.voiceId,
+                    "text": text,
                 }),
             });
 
             if (!response.ok) {
-                 let errorMessage = `Failed to get audio from server (status: ${response.status})`;
+                 let errorMessage = `Failed to get audio from Fish Audio (status: ${response.status})`;
                  try {
-                     // Try to get a more specific error message from our proxy's JSON response
                      const errorJson = await response.json();
-                     errorMessage = errorJson.error || errorJson.message || errorMessage;
+                     errorMessage = errorJson.detail || errorJson.message || errorMessage;
                  } catch (e) {
-                     // Response was not JSON, use the raw text if available
                      const errorText = await response.text();
                      if (errorText) errorMessage = errorText;
                  }

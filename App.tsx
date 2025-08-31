@@ -67,7 +67,6 @@ const App: React.FC = () => {
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
   const [activeView, setActiveView] = useState<'list' | 'editor' | 'chat'>('list');
   
-  const [defaultVoice, setDefaultVoice] = useState<Voice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [isVoiceManagerOpen, setIsVoiceManagerOpen] = useState(false);
@@ -92,37 +91,10 @@ const App: React.FC = () => {
     }
   }, [customVoices]);
 
-  // Load default voice config from server on initial render
-  useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const response = await fetch('/api/config');
-        if (response.ok) {
-          const config = await response.json();
-          if (config.defaultVoiceId) {
-            setDefaultVoice({
-              id: 'default_voice',
-              name: config.defaultVoiceName || 'Default Voice (Vercel)',
-              token: '', // Token is handled server-side
-              voiceId: config.defaultVoiceId,
-            });
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch server config:", error);
-      }
-    };
-    fetchConfig();
-  }, []);
-  
-  // The list of all available voices is now the default voice, plus any custom ones.
+  // The list of all available voices now only includes user-defined custom voices.
   const allVoices = useMemo(() => {
-    const voices: Voice[] = [];
-    if (defaultVoice) {
-      voices.push(defaultVoice);
-    }
-    return [...voices, ...customVoices];
-  }, [defaultVoice, customVoices]);
+    return [...customVoices];
+  }, [customVoices]);
 
 
   const handleOpenEditor = useCallback((persona: Persona) => {
@@ -318,7 +290,7 @@ const App: React.FC = () => {
             onClose={handleCloseVoiceManager}
             initialVoices={customVoices}
             onSave={handleSaveVoices}
-            defaultVoice={defaultVoice}
+            defaultVoice={null}
         />
       )}
     </div>

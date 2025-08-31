@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Voice } from '../types';
 import { CloseIcon, SaveIcon, PlusIcon, TrashIcon, EditIcon } from './icons';
@@ -7,7 +8,7 @@ interface VoiceManagerModalProps {
   onClose: () => void;
   initialVoices: Voice[];
   onSave: (voices: Voice[]) => void;
-  defaultVoice: Voice | null;
+  defaultVoice: Voice | null; // This prop is kept for type compatibility but will be null
 }
 
 const emptyVoice: Omit<Voice, 'id'> = { name: '', token: '', voiceId: '' };
@@ -88,15 +89,6 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({ isOpen, on
           {/* List of saved voices */}
           <div className="space-y-2">
             <h3 className="text-lg font-semibold text-gray-300">Saved Voices</h3>
-            {defaultVoice && (
-              <div className="flex items-center justify-between bg-gray-700/60 p-3 rounded-md border border-indigo-700/50">
-                <div className="flex-grow">
-                  <p className="font-semibold text-white">{defaultVoice.name}</p>
-                  <p className="text-xs text-indigo-400">Default Voice (from Server)</p>
-                </div>
-                {/* No actions for default voice */}
-              </div>
-            )}
             {voices.length > 0 ? (
                 voices.map(voice => (
                     <div key={voice.id} className="flex items-center justify-between bg-gray-700/60 p-3 rounded-md">
@@ -111,7 +103,7 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({ isOpen, on
                     </div>
                 ))
             ) : (
-                !defaultVoice && <p className="text-gray-500 text-sm">No custom voices saved yet.</p>
+                <p className="text-gray-500 text-sm">No custom voices saved yet.</p>
             )}
           </div>
         </main>
